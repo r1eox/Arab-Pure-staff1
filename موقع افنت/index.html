@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام الجرد الذكي - قسم الإيفنت تيم</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --card-bg: #1e293b;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --border: #334155;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      padding: 30px 20px;
+      min-height: 100vh;
+    }
+
+    .wrapper { max-width: 1200px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 25px; }
+    header h1 { font-size: 1.8rem; color: #60a5fa; margin-bottom: 8px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+
+    .box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+    }
+    .box label {
+      font-size: 0.9rem;
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: var(--text-sub);
+    }
+    textarea {
+      width: 100%;
+      height: 380px;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      color: var(--text-main);
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      resize: none;
+      outline: none;
+      direction: ltr;
+      text-align: left;
+    }
+    textarea:focus { border-color: var(--accent); }
+
+    .full-width-box {
+      margin-top: 20px;
+    }
+    .full-width-box textarea {
+      height: 220px;
+    }
+
+    .input-author {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .input-author input {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--text-main);
+      outline: none;
+      font-size: 0.9rem;
+      flex: 1;
+    }
+    .input-author input:focus { border-color: var(--accent); }
+
+    .stats-bar {
+      margin-top: 15px;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 15px;
+      font-size: 0.9rem;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .stats-count { color: #60a5fa; font-weight: bold; }
+    .stats-duplicates { color: #f87171; font-weight: bold; }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    button.action-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-sub);
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #10b981;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      opacity: 0;
+      transition: all 0.3s ease;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+
+  <div class="wrapper">
+    <header>
+      <h1>نظام معالجة وتجهيز الجرد - قسم الإيفنت تيم</h1>
+    </header>
+
+    <div class="grid">
+      <div class="box">
+        <label>1. المدخلات (النص الخام / الاستبيانات):</label>
+        <textarea id="inputData" placeholder="الصق بيانات الاستبيان هنا..."></textarea>
+      </div>
+      <div class="box">
+        <label>2. المخرجات (نتيجة الجرد للبوت):</label>
+        <textarea id="outputData" placeholder="ستظهر النتيجة هنا..." readonly></textarea>
+        <div class="stats-bar">
+          <div id="totalCount" class="stats-count">إجمالي العدد: 0</div>
+          <div id="duplicateAlert" class="stats-duplicates" style="display: none;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- الخانة الثالثة الخاصة بالتقرير الأسبوعي -->
+    <div class="box full-width-box">
+      <div class="input-author">
+        <label style="margin: 0; min-width: 140px;">منشئ التقرير (اسمك):</label>
+        <input type="text" id="authorName" placeholder="أدخل اسمك أو منشن الحساب..." oninput="processData()">
+      </div>
+      <label>3. التقرير الأسبوعي (جاهز للنسخ):</label>
+      <textarea id="reportData" readonly></textarea>
+    </div>
+
+    <div class="actions">
+      <button class="action-btn" onclick="processData()">معالجة وتحديث</button>
+      <button class="action-btn secondary" onclick="copyResult('outputData')">نسخ الجرد</button>
+      <button class="action-btn secondary" onclick="copyResult('reportData')">نسخ التقرير الأسبوعي</button>
+      <button class="action-btn secondary" onclick="clearAll()">مسح الكل</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">تم النسخ بنجاح!</div>
+
+  <script>
+    function removeFancyFont(text) {
+      if (!text) return '';
+      let str = text.normalize('NFKD');
+      let clean = '';
+      for (let i = 0; i < str.length; i++) {
+        let code = str.charCodeAt(i);
+        if (code >= 0xD835) {
+          let codePoint = str.codePointAt(i);
+          if (codePoint >= 0x1D400 && codePoint <= 0x1D419) clean += String.fromCharCode(65 + (codePoint - 0x1D400));
+          else if (codePoint >= 0x1D41A && codePoint <= 0x1D433) clean += String.fromCharCode(97 + (codePoint - 0x1D41A));
+          else if (codePoint >= 0x1D434 && codePoint <= 0x1D44D) clean += String.fromCharCode(65 + (codePoint - 0x1D434));
+          else if (codePoint >= 0x1D44E && codePoint <= 0x1D467) clean += String.fromCharCode(97 + (codePoint - 0x1D44E));
+          else if (codePoint >= 0x1D468 && codePoint <= 0x1D481) clean += String.fromCharCode(65 + (codePoint - 0x1D468));
+          else if (codePoint >= 0x1D482 && codePoint <= 0x1D49B) clean += String.fromCharCode(97 + (codePoint - 0x1D482));
+          else if (codePoint >= 0x1D5D4 && codePoint <= 0x1D5ED) clean += String.fromCharCode(65 + (codePoint - 0x1D5D4));
+          else if (codePoint >= 0x1D5EE && codePoint <= 0x1D607) clean += String.fromCharCode(97 + (codePoint - 0x1D5EE));
+          else if (codePoint >= 0x1D608 && codePoint <= 0x1D621) clean += String.fromCharCode(65 + (codePoint - 0x1D608));
+          else if (codePoint >= 0x1D622 && codePoint <= 0x1D63B) clean += String.fromCharCode(97 + (codePoint - 0x1D622));
+          else if (codePoint >= 0x1D63C && codePoint <= 0x1D655) clean += String.fromCharCode(65 + (codePoint - 0x1D63C));
+          else if (codePoint >= 0x1D656 && codePoint <= 0x1D66F) clean += String.fromCharCode(97 + (codePoint - 0x1D656));
+          i++;
+        } else {
+          clean += str[i];
+        }
+      }
+      return clean.replace(/[\u0300-\u036f]/g, '').trim();
+    }
+
+    function cleanAndStandardizeRank(rawRank) {
+      if (!rawRank) return '';
+      let clean = removeFancyFont(rawRank);
+
+      const standardRanks = [
+        // Keep specific composite ranks before generic ones like Admin.
+        "Super Admin", "Head Admin", "Supervisor", "Mod", "Admin",
+        "Controller", "Hand of the king", "Pre Master", "Master", "Advisor",
+        "Operator", "Marshal", "Manager", "Director", "Executive",
+        "President", "Commander", "Mythical", "Colonel", "Boss",
+        "Big Boss", "CEO", "Co Founder", "Founder", "Consultant"
+      ];
+
+      const lowerClean = clean.toLowerCase();
+      for (let rank of standardRanks) {
+        if (lowerClean.includes(rank.toLowerCase())) {
+          return rank;
+        }
+      }
+      return clean;
+    }
+
+    function checkIfHasResponsibilities(respText) {
+      if (!respText) return false;
+      const clean = respText.trim().toLowerCase();
+      if (
+        clean === '' ||
+        clean === '|' ||
+        clean === '-' ||
+        clean.includes('لا يوجد') ||
+        clean.includes('لايوجد') ||
+        clean.includes('بدون') ||
+        clean.includes('غير متوفر')
+      ) {
+        return false;
+      }
+      return true;
+    }
+
+    function getSectionScore(events, hasResp) {
+      if (events >= 40) return { text: "ممتاز جدا", points: hasResp ? 6 : 10 };
+      if (events >= 21) return { text: "ممتاز", points: hasResp ? 4 : 8 };
+      if (events >= 11) return { text: "جيد جدا", points: hasResp ? 3 : 5 };
+      return { text: "سيء", points: 0 };
+    }
+
+    function getRespScore(respText) {
+      if (!respText) return 0;
+      const clean = respText.trim();
+      if (clean.includes("ممتاز جدا")) return 4;
+      if (clean.includes("ممتاز")) return 2;
+      if (clean.includes("جيد جدا")) return 1;
+      return 0;
+    }
+
+    function normalizeEval(rawEval, totalPoints) {
+      if (rawEval) {
+        const cleanEval = rawEval.trim();
+        if (cleanEval.includes("جديد")) return "جديد";
+        if (cleanEval.includes("خارج خدمة") || cleanEval.includes("خارج الخدمة")) return "خارج خدمة";
+        if (cleanEval.includes("ممتاز جدا")) return "ممتاز جدا";
+        if (cleanEval.includes("ممتاز")) return "ممتاز";
+        if (cleanEval.includes("جيد جدا")) return "جيد جدا";
+        if (cleanEval.includes("سيء") || cleanEval.includes("سئ")) return "سيء";
+      }
+
+      if (totalPoints >= 9) return "ممتاز جدا";
+      if (totalPoints >= 7) return "ممتاز";
+      if (totalPoints >= 4) return "جيد جدا";
+      return "سيء";
+    }
+
+    function formatUserMention(rawInputId) {
+      if (!rawInputId) return '';
+      const digitMatch = rawInputId.match(/\d{17,20}/);
+      if (digitMatch) {
+        return `<@${digitMatch[0]}>\u00A0`;
+      }
+      let clean = rawInputId.replace(/[\u200B-\u200D\uFEFF\u200F]/g, '').replace(/@+/g, '').trim();
+      return `@${clean}\u00A0`;
+    }
+
+    function processData() {
+      const input = document.getElementById('inputData').value;
+      const totalCountElem = document.getElementById('totalCount');
+      const duplicateAlertElem = document.getElementById('duplicateAlert');
+      const authorName = document.getElementById('authorName').value.trim();
+      const outOfServiceRoleId = '1135000856278880330';
+      const outOfServiceRoleMention = `<@&${outOfServiceRoleId}>`;
+      const hasOutOfServiceRoleMention = (text) => {
+        if (!text) return false;
+        return text.includes(outOfServiceRoleMention) || text.includes(outOfServiceRoleId);
+      };
+      const isOutOfServiceText = (text) => {
+        if (!text) return false;
+        const normalized = text.replace(/\s+/g, '').toLowerCase();
+        return normalized.includes('خارجالخدمة') || normalized.includes('خارجخدمة');
+      };
+      const extractRoleMention = (text) => {
+        if (!text) return '';
+        const match = text.match(/<@&(\d{17,20})>/);
+        if (match) return `<@&${match[1]}>`;
+        return '';
+      };
+
+      if (!input.trim()) {
+        document.getElementById('outputData').value = '';
+        document.getElementById('reportData').value = '';
+        totalCountElem.textContent = 'إجمالي العدد: 0';
+        duplicateAlertElem.style.display = 'none';
+        return;
+      }
+
+      const blocks = input.split(/={3,}/);
+      const lineSeparator = '`-----------------------------------------------------`';
+      let result = `${lineSeparator}\n`;
+      let processedCount = 0;
+      let idTracker = {};
+
+      // إحصائيات التقرير الأسبوعي
+      let countNew = 0;
+      let countOut = 0;
+      let countBad = 0;
+      let countActive = 0;
+
+      blocks.forEach((block) => {
+        if (!block.trim()) return;
+
+        let data = {
+          id: '',
+          events: 0,
+          respEval: '',
+          rank: '',
+          rawEval: '',
+          finalEval: ''
+        };
+
+        const lines = block.split(/\r?\n/);
+        lines.forEach(line => {
+          if (!line.includes(':')) return;
+          const parts = line.split(':');
+          const key = parts[0].trim();
+          const val = parts.slice(1).join(':').trim();
+
+          if (key.includes('الايدي')) data.id = val;
+          else if (key.includes('عدد الفعاليات')) data.events = parseInt(val) || 0;
+          else if (key.includes('التقييم بالمسؤوليات') || key.includes('التقيم بالمسؤوليات')) data.respEval = val;
+          else if (key.includes('الرتبة الادارية') || key.includes('الرتبة')) data.rank = val;
+          else if (key.includes('التقيم النهائي') || key.includes('التقييم النهائي')) data.finalEval = val;
+          else if (key === 'التقييم' || key === 'التقيم') data.rawEval = val;
+        });
+
+        if (data.id) {
+          const cleanRank = cleanAndStandardizeRank(data.rank);
+          const hasResponsibilities = checkIfHasResponsibilities(data.respEval);
+
+          const sectionRes = getSectionScore(data.events, hasResponsibilities);
+          const respPoints = hasResponsibilities ? getRespScore(data.respEval) : 0;
+          const totalPoints = sectionRes.points + respPoints;
+
+          const chosenEval = data.finalEval || data.rawEval;
+          const detectedRoleMention =
+            extractRoleMention(data.finalEval) ||
+            extractRoleMention(data.rawEval) ||
+            extractRoleMention(data.respEval) ||
+            extractRoleMention(data.id);
+          const isOutOfServiceRole =
+            hasOutOfServiceRoleMention(data.id) ||
+            hasOutOfServiceRoleMention(data.finalEval) ||
+            hasOutOfServiceRoleMention(data.rawEval) ||
+            hasOutOfServiceRoleMention(data.respEval);
+          let finalRating = normalizeEval(chosenEval, totalPoints);
+
+          const hasOutOfServiceInText =
+            isOutOfServiceText(data.finalEval) ||
+            isOutOfServiceText(data.rawEval) ||
+            isOutOfServiceText(data.respEval);
+
+          if (isOutOfServiceRole || hasOutOfServiceInText) {
+            finalRating = 'خارج خدمة';
+          }
+
+          processedCount++;
+
+          let rawKey = data.id.replace(/[^a-zA-Z0-9_.-]/g, '').toLowerCase().trim();
+          if (rawKey) {
+            idTracker[rawKey] = (idTracker[rawKey] || 0) + 1;
+          }
+
+          // تصنيف الإحصائيات
+          if (finalRating === 'جديد') {
+            countNew++;
+          } else if (finalRating === 'خارج خدمة') {
+            countOut++;
+          } else if (finalRating === 'سيء') {
+            countBad++;
+          } else if (['جيد جدا', 'ممتاز', 'ممتاز جدا'].includes(finalRating)) {
+            countActive++;
+          }
+
+          const shouldMentionOutOfServiceRole = finalRating === 'خارج خدمة' || isOutOfServiceRole || hasOutOfServiceInText;
+          const roleMentionForOutput = detectedRoleMention || outOfServiceRoleMention;
+          let formattedMention = formatUserMention(data.id);
+          const evaluationOutput = shouldMentionOutOfServiceRole ? roleMentionForOutput : finalRating;
+          result += `${formattedMention}\nالتقييم : ${evaluationOutput}\nالرتبة الادارية : ${cleanRank}\n${lineSeparator}\n`;
+        }
+      });
+
+      document.getElementById('outputData').value = result;
+      totalCountElem.textContent = `إجمالي العدد: ${processedCount}`;
+
+      // بناء التقرير الأسبوعي
+      const weeklyReport = `**\` نموذج التقرير الاسبوعي : @🎉・𝐄𝐕𝐄𝐍𝐓𝐒 𝐓𝐄𝐀𝐌   \`**\n\n` +
+        `**كم العدد حالي بالقسم : ${processedCount}**\n\n` +
+        `**كم عدد ماخذين اجازه : ${countOut} خارج خدمة ( (${countNew}) جديد)**\n\n` +
+        `**عدد غير متفاعلين ${countBad} سيء**\n\n` +
+        `**عدد المتفاعلين بالقسم : ${countActive}  تقييم جيد جدا + ممتاز + ممتاز جدا   **\n\n` +
+        `**هل يوجد ملاحظة بالقسم او حاب تطور شي من جميع نواحي :  لايوجد يعطيكم العافيية    **\n\n` +
+        `**تم انشاء التقرير من قبل :{ ${authorName} }**`;
+
+      document.getElementById('reportData').value = weeklyReport;
+
+      let duplicates = Object.keys(idTracker).filter(key => idTracker[key] > 1);
+      if (duplicates.length > 0) {
+        duplicateAlertElem.style.display = 'block';
+        duplicateAlertElem.innerHTML = `⚠️ تنبيه: يوجد أسماء/IDs مكررة: <br>${duplicates.map(d => `- ${d} (تكرر ${idTracker[d]} مرات)`).join('<br>')}`;
+      } else {
+        duplicateAlertElem.style.display = 'none';
+      }
+    }
+
+    function copyResult(elementId) {
+      const output = document.getElementById(elementId);
+      if (!output.value) return;
+      output.select();
+      navigator.clipboard.writeText(output.value);
+      showToast();
+    }
+
+    function clearAll() {
+      document.getElementById('inputData').value = '';
+      document.getElementById('outputData').value = '';
+      document.getElementById('reportData').value = '';
+      document.getElementById('authorName').value = '';
+      document.getElementById('totalCount').textContent = 'إجمالي العدد: 0';
+      document.getElementById('duplicateAlert').style.display = 'none';
+    }
+
+    function showToast() {
+      const toast = document.getElementById('toast');
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    document.getElementById('inputData').addEventListener('input', processData);
+  </script>
+</body>
+</html>
