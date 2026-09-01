@@ -1,0 +1,28 @@
+:root {
+  --bg: #f3f6fb;
+  --panel: #ffffff;
+  --panel-alt: #eef3fb;
+  --sidebar: #1f2430;
+  --sidebar-soft: #2a3344;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --primary: #2f6fed;
+  --primary-soft: rgba(47, 111, 237, 0.12);
+  --text: #1e293b;
+  --text-soft: #64748b;
+  --success: #18a957;
+  --warning: #f6b100;
+  --danger: #e63946;
+  --shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Tahoma", "Segoe UI", sans-serif;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}

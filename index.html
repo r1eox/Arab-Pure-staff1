@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>لوحة الإدارة الموحدة</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="assets/css/theme.css" />
+    <link rel="stylesheet" href="assets/css/dashboard.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <div class="brand-mark">M</div>
+          <div>
+            <h2>لوحة الإدارة</h2>
+            <small>Unified Dashboard</small>
+          </div>
+        </div>
+
+        <nav class="menu" aria-label="القائمة الرئيسية">
+          <button class="nav-item active" data-module="events">
+            <span class="nav-icon">●</span>
+            <span>EVENTS-TEAM</span>
+          </button>
+
+          <button class="nav-item" data-module="interviews">
+            <span class="nav-icon">◉</span>
+            <span>INTERVIEWS-OFFICIAL</span>
+          </button>
+
+          <button class="nav-item" data-module="raqabh">
+            <span class="nav-icon">◌</span>
+            <span>RAQABH</span>
+          </button>
+
+          <button class="nav-item" data-module="roles">
+            <span class="nav-icon">▣</span>
+            <span>ROLES-OFFICIAL</span>
+          </button>
+
+          <button class="nav-item" data-module="scenario">
+            <span class="nav-icon">✦</span>
+            <span>Senario-TEAM</span>
+          </button>
+
+          <button class="nav-item" data-module="ban">
+            <span class="nav-icon">⛔</span>
+            <span>BAN-TEAM</span>
+          </button>
+        </nav>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="فتح القائمة" aria-expanded="false">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+
+          <div class="topbar-title">
+            <h1>Arab Pura Staff</h1>
+          </div>
+        </header>
+
+        <section class="content-panel">
+          <div class="content-frame-wrap">
+            <div id="moduleContent" class="module-content"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="mobile-backdrop" id="mobileBackdrop"></div>
+
+    <script src="shared/config.js"></script>
+    <script src="shared/storage.js"></script>
+    <script src="assets/js/app.js"></script>
+  </body>
+</html>
