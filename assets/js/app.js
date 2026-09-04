@@ -393,6 +393,325 @@ document.addEventListener('DOMContentLoaded', function () {
       `تم انشاء التقرير من قبل : ( ${authorName} ) **`;
   }
 
+  const eventDepartmentRoles = {
+    boss: '<@&1135000856417292360>',
+    deputyBoss: '<@&1135000856379531336>',
+    supervisorA: '<@&1268974249901691051>',
+    deputySupervisorA: '<@&1135000856304042008>',
+    assistantSupervisor: '<@&1135000856304042007>',
+    supervisor: '<@&1135000856304042006>',
+    deputySupervisor: '<@&1135000856304042005>',
+    member: '<@&1135000856278880335>'
+  };
+
+  const scenarioDepartmentRoles = {
+    boss: '<@&1480626996445712415>',
+    deputyBoss: '<@&1480624032121618604>',
+    supervisorA: '<@&1480630452409860146>',
+    deputySupervisorA: '<@&1480631532048748865>',
+    assistantSupervisor: '<@&1480631792267690197>',
+    supervisor: '<@&1480631999566843914>',
+    deputySupervisor: '<@&1480410144474009723>',
+    member: '<@&1480356635355512963>'
+  };
+
+  function scenarioRankInfo(rankText) {
+    const text = String(rankText || '').trim();
+    if (/1480626996445712415|1480624032121618604|1480630452409860146|1480631532048748865/.test(text)) {
+      let role = scenarioDepartmentRoles.boss;
+      if (text.includes('1480624032121618604')) role = scenarioDepartmentRoles.deputyBoss;
+      if (text.includes('1480630452409860146')) role = scenarioDepartmentRoles.supervisorA;
+      if (text.includes('1480631532048748865')) role = scenarioDepartmentRoles.deputySupervisorA;
+      return { role, points: false, punish: 'none' };
+    }
+    if (text.includes('1480631792267690197') || text.includes('مساعد')) return { role: scenarioDepartmentRoles.assistantSupervisor, points: false, punish: 'demote' };
+    if (/1480631999566843914|1480410144474009723|مشرف/.test(text)) {
+      const role = text.includes('1480410144474009723') ? scenarioDepartmentRoles.deputySupervisor : scenarioDepartmentRoles.supervisor;
+      return { role, points: true, punish: 'demote' };
+    }
+    return { role: scenarioDepartmentRoles.member, points: true, punish: 'dismiss' };
+  }
+
+  function eventRankInfo(rankText) {
+    const text = String(rankText || '').trim();
+    if (!text) return { role: eventDepartmentRoles.member, points: true, punish: 'dismiss' };
+
+    const rankOrder = [
+      'supervisor', 'mod', 'admin', 'super admin', 'head admin', 'controller',
+      'hand of the king', 'pre master', 'master', 'advisor', 'operator', 'marshal',
+      'manager', 'director', 'executive', 'president', 'commander', 'mythical',
+      'colonel', 'boss', 'big boss', 'ceo', 'co founder', 'founder', 'consultant'
+    ];
+    const normalizedText = text.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+    const matchedRank = [...rankOrder].sort((left, right) => right.length - left.length).find((rank) => normalizedText.includes(rank));
+    if (matchedRank && rankOrder.indexOf(matchedRank) >= rankOrder.indexOf('controller')) {
+      return { role: text.match(/<@&\d{17,20}>/)?.[0] || eventDepartmentRoles.member, points: false, punish: 'none' };
+    }
+
+    if (/1135000856417292360|1135000856379531336|1268974249901691051|1135000856304042008/.test(text)) {
+      let role = eventDepartmentRoles.boss;
+      if (text.includes('1135000856379531336')) role = eventDepartmentRoles.deputyBoss;
+      if (text.includes('1268974249901691051')) role = eventDepartmentRoles.supervisorA;
+      if (text.includes('1135000856304042008')) role = eventDepartmentRoles.deputySupervisorA;
+      return { role, points: false, punish: 'none' };
+    }
+
+    if (text.includes('1135000856304042007') || text.includes('مساعد')) {
+      return { role: eventDepartmentRoles.assistantSupervisor, points: false, punish: 'demote' };
+    }
+
+    if (/1135000856304042006|1135000856304042005|مشرف/.test(text)) {
+      const role = text.includes('1135000856304042005') ? eventDepartmentRoles.deputySupervisor : eventDepartmentRoles.supervisor;
+      return { role, points: true, punish: 'demote' };
+    }
+
+    return { role: eventDepartmentRoles.member, points: true, punish: 'dismiss' };
+  }
+
+  function getEventMemberRanks() {
+    const field = moduleContent.querySelector('.module-members');
+    const map = {};
+    if (!field || !field.value.trim()) return map;
+
+    let currentRole = eventDepartmentRoles.member;
+    field.value.split(/\r?\n/).forEach((line) => {
+      const text = line.trim();
+      if (!text) return;
+
+      const roles = text.match(/<@&\d{17,20}>/g);
+      if (roles && (text.includes('➜') || text.includes('<@&'))) {
+        currentRole = roles[roles.length - 1];
+        return;
+      }
+
+      const userId = extractDiscordId(text);
+      if (userId) map[userId] = currentRole;
+    });
+    return map;
+  }
+
+  function getScenarioMemberRanks() {
+    const field = moduleContent.querySelector('.module-members');
+    const map = {};
+    if (!field || !field.value.trim()) return map;
+    let currentRole = scenarioDepartmentRoles.member;
+    field.value.split(/\r?\n/).forEach((line) => {
+      const text = line.trim();
+      if (!text) return;
+      const roles = text.match(/<@&\d{17,20}>/g);
+      if (roles && (text.includes('➜') || text.includes('<@&'))) {
+        currentRole = roles[roles.length - 1];
+        return;
+      }
+      const userId = extractDiscordId(text);
+      if (userId) map[userId] = currentRole;
+    });
+    return map;
+  }
+
+  function getResponsibilityEvaluations() {
+    const field = moduleContent.querySelector('.module-responsibilities');
+    const evaluations = {};
+    if (!field || !field.value.trim()) return evaluations;
+
+    field.value.split(/={3,}/).forEach((block) => {
+      const lines = block.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      let identity = '';
+      let evaluation = '';
+
+      lines.forEach((line) => {
+        const separatorIndex = line.indexOf(':');
+        if (separatorIndex < 0) {
+          if (!identity) identity = extractDiscordId(line);
+          return;
+        }
+
+        const key = line.slice(0, separatorIndex).trim();
+        const value = line.slice(separatorIndex + 1).trim();
+        identity = extractDiscordId(key) || extractDiscordId(value) || identity;
+        if (/منشن الشخص|المنشن|الايدي|id/i.test(key)) identity = extractDiscordId(value) || identity;
+        if (/التقييم بالمسؤوليات|التقيم بالمسؤوليات|المسؤوليات|المسوليات/i.test(key)) evaluation = value;
+        if (!/منشن الشخص|المنشن|الايدي|id|التقييم بالمسؤوليات|التقيم بالمسؤوليات|المسؤوليات|المسوليات/i.test(key) && identity) evaluation = value;
+      });
+
+      if (!identity && lines[0]) identity = extractDiscordId(lines[0]);
+      if (!evaluation && lines.length >= 2) evaluation = lines[lines.length - 1].replace(/^.*?:\s*/, '').trim();
+      if (identity && evaluation) evaluations[identity] = evaluation;
+    });
+
+    return evaluations;
+  }
+
+  function formattedMentionForEvent(value) {
+    return formatEventUserMention(value) || formatUserMention(value) || 'غير متاح';
+  }
+
+  function preserveScenarioMention(mention, identity) {
+    const source = String(mention || '').trim();
+    const mentionMatch = source.match(/<@!?(\d{17,20})>/i);
+    if (mentionMatch) return `<@${mentionMatch[1]}>`;
+    return formattedMentionForEvent(source || identity);
+  }
+
+  function buildEventPointsText(categories) {
+    return `**السلام عليكم ورحمة الله وبركاتة •\nوالصلاة والسلام على اشرف الانبياء والمرسلين سيدنا ونبينا محمد\nأسعد الله اوقاتكم بكل خير جميعًا\nتحيه طيبه وبعد • **\n\n` +
+      `**يتم أعطاء المدعو : **\n<@&1135000856236925014>\n${categories[1].join('\n') || 'لا يوجد'}\n\n` +
+      `<@&1135000856278880326>\n${categories[2].join('\n') || 'لا يوجد'}\n\n` +
+      `<@&1135000856236925016>\n${categories[3].join('\n') || 'لا يوجد'}\n\n` +
+      "` السبب  : جرداسبوعي استمروووو `\n\n**`توقيع:`**\n  <@&1135000856417292360>\n<@&1135000856379531336>\n\n||<@&1135000856278880335>||";
+  }
+
+  function buildEventPenaltyText(users, action) {
+    return `**═════════ ﷽ ═══════════**\n\n**باسمي <@&1135000856417292360> **\n\n**\`يتم محاسبة المدعو :\`**\n\n` +
+      `${users.join('\n') || 'لا يوجد'}\n\n** بـ  : ${action}**\n\n\`السبب :عدم تفاعل \`\n\n--------------------\n\n` +
+      `**اسأل الله التوفيق لي ولكم التوفيق والسداد **\n\n**توقيع   **\n- <@&1135000856417292360> \n- <@&1135000856379531336> \n\n||<@&1135000856278880335>||`;
+  }
+
+  function buildScenarioPointsText(categories) {
+    return `**السلام عليكم ورحمة الله وبركاتة •\nوالصلاة والسلام على اشرف الانبياء والمرسلين سيدنا ونبينا محمد\nأسعد الله اوقاتكم بكل خير جميعًا\nتحيه طيبه وبعد • **\n\n**يتم أعطاء المدعو : **\n<@&1480630670245236787>\n${categories[1].join('\n') || 'لا يوجد'}\n\n` +
+      `<@&1480631057580560486>\n${categories[2].join('\n') || 'لا يوجد'}\n\n\` السبب  : جرداسبوعي استمروووو \`\n\n**\`توقيع:\`**\n<@&1480626996445712415>\n<@&1480624032121618604>\n\n||<@&1480356635355512963>||`;
+  }
+
+  function buildScenarioPenaltyText(users, action) {
+    return `**═════════ ﷽ ═══════════**\n\n**باسمي <@&1480626996445712415> **\n\n**\`يتم محاسبة المدعو :\`**\n\n${users.join('\n') || 'لا يوجد'}\n\n**بـ : ${action}**\n\n\`السبب : عدم تفاعل \`\n\n--------------------\n\n**اسأل الله التوفيق لي ولكم التوفيق والسداد **\n\n**توقيع   **\n- <@&1480626996445712415>\n- <@&1480624032121618604>\n\n||<@&1480356635355512963>||`;
+  }
+
+  function parseScenarioNumber(value) {
+    const match = String(value || '').replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+    return match ? Number(match[0]) : 0;
+  }
+
+  function parseScenarioHours(value) {
+    const text = String(value || '').trim();
+    if (!text) return 0;
+    const hours = text.match(/(\d+(?:\.\d+)?)\s*(?:س|ساعة|ساعات|h)/i);
+    const minutes = text.match(/(\d+(?:\.\d+)?)\s*(?:د|دقيقة|دقائق|m)/i);
+    if (hours || minutes) return (hours ? Number(hours[1]) * 60 : 0) + (minutes ? Number(minutes[1]) : 0);
+    const clock = text.match(/^(\d+)\s*[:.]\s*(\d{1,2})$/);
+    if (clock) return Number(clock[1]) * 60 + Number(clock[2]);
+    return parseScenarioNumber(text) * 60;
+  }
+
+  function parseScenarioTriple(value) {
+    const numbers = String(value || '').match(/\d+(?:\.\d+)?/g) || [];
+    return [0, 1, 2].map((index) => Number(numbers[index] || 0));
+  }
+
+  function scenarioIdentityKey(value) {
+    const discordId = extractDiscordId(value);
+    if (discordId) return discordId;
+    return String(value || '').replace(/^@+/, '').trim().toLowerCase();
+  }
+
+  function scenarioGradeFromPoints(points) {
+    if (points >= 450) return 'ممتاز جدا';
+    if (points >= 251) return 'ممتاز';
+    if (points >= 151) return 'جيد جدا';
+    return 'سيء';
+  }
+
+  function scenarioLowerGrade(grade) {
+    if (grade.includes('ممتاز جدا')) return 'ممتاز';
+    if (grade.includes('ممتاز')) return 'جيد جدا';
+    if (grade.includes('جيد جدا')) return 'سيء';
+    return 'سيء';
+  }
+
+  function lowerScenarioGradeByCount(grade, count) {
+    let result = grade;
+    for (let index = 0; index < count; index++) {
+      result = scenarioLowerGrade(result);
+    }
+    return result;
+  }
+
+  function scenarioGradeRank(grade) {
+    if (grade.includes('ممتاز جدا')) return 3;
+    if (grade.includes('ممتاز')) return 2;
+    if (grade.includes('جيد جدا')) return 1;
+    return 0;
+  }
+
+  function calculateScenarioFinalGrade(baseGrade, responsibilityGrade, badResponsibilityCount = 0) {
+    if (!responsibilityGrade || responsibilityGrade === 'لايوجد مسؤوليات') return baseGrade;
+    if (responsibilityGrade === 'سيء' && badResponsibilityCount > 0) return scenarioLowerGrade(baseGrade);
+    return baseGrade;
+  }
+
+  function scenarioResponsibilityGrade(value) {
+    const text = String(value || '').trim();
+    if (/ممتاز\s*جدا/.test(text)) return 'ممتاز جدا';
+    if (/جيد\s*جدا/.test(text)) return 'جيد جدا';
+    if (/ممتاز/.test(text)) return 'ممتاز';
+    if (/سيء|سئ|سيئ|ضعيف|عدم تفاعل/.test(text)) return 'سيء';
+    return '';
+  }
+
+  function scenarioResponsibilityPoints(value, points) {
+    const grade = scenarioResponsibilityGrade(value);
+    return grade === 'ممتاز' || grade === 'ممتاز جدا' ? points : 0;
+  }
+
+  function getScenarioResponsibilityMap(rawText) {
+    const map = {};
+    String(rawText || '').split(/={3,}/).forEach((block) => {
+      const values = {};
+      let userId = '';
+      block.split(/\r?\n/).forEach((line) => {
+        const separator = line.indexOf(':');
+        if (separator < 0) return;
+        const key = line.slice(0, separator).trim();
+        const value = line.slice(separator + 1).trim();
+        userId = userId || scenarioIdentityKey(value) || scenarioIdentityKey(key);
+        if (/مراقبة اللوقات/.test(key)) values.logs = value;
+        else if (/تدقيق الصور/.test(key)) values.images = value;
+        else if (/الملاحظات/.test(key)) values.notes = value;
+        else if (/الاجازات/.test(key)) values.leaves = value;
+        else if (/التحذيرات/.test(key)) values.warnings = value;
+        else if (/دفتر الحضور/.test(key)) values.attendance = value;
+        else if (/مسؤول الجرد/.test(key)) values.inventory = value;
+        else if (/مشرف المسؤوليات/.test(key)) values.responsibilitySupervisor = value;
+        else if (/تقييم المسؤوليات النهائي|تقيم المسؤوليات النهائي|تقييم المسؤوليات|تقيم المسؤوليات|التقييم النهائي|التقيم النهائي/.test(key)) values.final = value;
+      });
+      if (userId) map[userId] = values;
+    });
+    return map;
+  }
+
+  function parseScenarioRecords(input) {
+    const records = [];
+    const cleanInput = String(input || '').replace(/[\u200B-\u200D\uFEFF\u200F]/g, '');
+    cleanInput.split(/(?=منشن\s*الشخص\s*:)|\*\*==============\*\*/g).forEach((block) => {
+      if (!/منشن\s*الشخص/.test(block)) return;
+      const record = { mention: '', id: '', adminRank: '', thiefHours: '', scenarioHours: '', generalHours: '', totalHours: '', completedRooms: '', common: 0, jewelry: '', central: '', home: '', scenarioPoints: 0, photos: '', stolenPhotos: 0, rawGrade: '' };
+      block.split(/\r?\n/).forEach((line) => {
+        const separator = line.indexOf(':');
+        if (separator < 0) return;
+        const key = line.slice(0, separator).replace(/[\u200B-\u200D\uFEFF\u200F]/g, '').trim();
+        const value = line.slice(separator + 1).trim();
+        if (/منشن\s*الشخص/.test(key)) record.mention = value;
+        else if (/^الايدي/.test(key)) record.id = value;
+        else if (/الرتبة\s*الادارية/.test(key)) record.adminRank = value;
+        else if (/ساعات مراقب سرقات/.test(key)) record.thiefHours = value;
+        else if (/ساعات مراقب سيناريوهات/.test(key)) record.scenarioHours = value;
+        else if (/ساعات مراقب عام/.test(key)) record.generalHours = value;
+        else if (/مجموع الساعات/.test(key)) record.totalHours = value;
+        else if (/هل أكمل 4 ساعات/.test(key)) record.completedRooms = value;
+        else if (/مراقبة السيناريو المشترك/.test(key)) record.common = parseScenarioNumber(value);
+        else if (/مراقبة المجوهرات/.test(key)) record.jewelry = value;
+        else if (/مراقبة سيناريوهات البنك المركزي/.test(key)) record.central = value;
+        else if (/مراقبة سرقة المنزل/.test(key)) record.home = value;
+        else if (/اجمالي نقاط السيناريوهات/.test(key)) record.scenarioPoints = parseScenarioNumber(value);
+        else if (/مراقبة\s*(?:300|400)\s*صورة/.test(key)) record.photos = value;
+        else if (/مجموع الصور للسرقات/.test(key)) record.stolenPhotos = parseScenarioNumber(value);
+        else if (/التقييم النهائي|التقيم النهائي/.test(key)) record.rawGrade = value;
+      });
+      record.identity = extractDiscordId(record.mention) || scenarioIdentityKey(record.mention) || scenarioIdentityKey(record.id);
+      if (record.identity) records.push(record);
+    });
+    return records;
+  }
+
   function parseEventBlocks(input, moduleKey = 'events') {
     if (!input || !input.trim()) return [];
 
@@ -932,16 +1251,20 @@ document.addEventListener('DOMContentLoaded', function () {
       `**تم انشاء التقرير من قبل :{ ${authorName} }**`;
   }
 
-  function buildEventSectionResult(input, authorName, cfg) {
+  function buildEventSectionResult(input, authorName, cfg, memberRanks = {}, responsibilityEvaluations = {}) {
     const lineSeparator = '`-----------------------------------------------------`';
     const blocks = input.split(/={3,}/);
     let result = `${lineSeparator}\n`;
+    let finalInventory = `${lineSeparator}\n`;
     let processedCount = 0;
     let idTracker = {};
     let countNew = 0;
     let countOut = 0;
     let countBad = 0;
     let countActive = 0;
+    const pointCategories = { 1: [], 2: [], 3: [] };
+    const demoteUsers = [];
+    const dismissUsers = [];
 
     blocks.forEach((block) => {
       if (!block.trim()) return;
@@ -949,6 +1272,9 @@ document.addEventListener('DOMContentLoaded', function () {
       let data = {
         id: '',
         events: 0,
+        deptRank: '',
+        sectionPoints: '',
+        memberPoints: '',
         respEval: '',
         rank: '',
         rawEval: '',
@@ -965,6 +1291,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (key.includes('الايدي')) data.id = val;
         else if (key.includes('عدد الفعاليات')) data.events = parseInt(val) || 0;
         else if (key.includes('التقييم بالمسؤوليات') || key.includes('التقيم بالمسؤوليات')) data.respEval = val;
+        else if (key.includes('رتبة القسم')) data.deptRank = val;
+        else if (key.includes('بوينتات القسم')) data.sectionPoints = val;
+        else if (key === 'البوينتات' || key.includes('البوينتات')) data.memberPoints = val;
         else if (key.includes('الرتبة الادارية') || key.includes('الرتبة')) data.rank = val;
         else if (key.includes('التقيم النهائي') || key.includes('التقييم النهائي')) data.finalEval = val;
         else if (key === 'التقييم' || key === 'التقيم') data.rawEval = val;
@@ -980,6 +1309,14 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       const cleanRank = cleanAndStandardizeRank(data.rank);
+      const userId = extractDiscordId(data.id);
+      if (Object.keys(responsibilityEvaluations).length > 0) {
+        data.respEval = responsibilityEvaluations[userId] || 'لايوجد مسؤوليات';
+      } else if (!data.respEval) {
+        data.respEval = 'لايوجد مسؤوليات';
+      }
+      const departmentRankInfo = eventRankInfo((userId && memberRanks[userId]) || data.deptRank);
+      const administrativeRankInfo = eventRankInfo(data.rank);
       const hasResponsibilities = checkIfHasResponsibilities(data.respEval);
       const sectionRes = getSectionScore(data.events, hasResponsibilities);
       const respPoints = hasResponsibilities ? getRespScore(data.respEval) : 0;
@@ -1005,6 +1342,17 @@ document.addEventListener('DOMContentLoaded', function () {
         finalRating = 'خارج خدمة';
       }
 
+      const calculatedSectionPoints = finalRating.includes('ممتاز جدا') ? 3 : finalRating.includes('ممتاز') ? 2 : finalRating.includes('جيد جدا') ? 1 : 0;
+      const sectionPoints = data.sectionPoints && data.sectionPoints !== '0' ? data.sectionPoints : String(calculatedSectionPoints);
+      const calculatedMemberPoints = !administrativeRankInfo.points ? '0' : data.events >= 100 ? 'ترقيتين' : data.events >= 50 ? 'ترقية' : data.events >= 25 ? '2' : data.events >= 15 ? '1' : '0';
+      const memberPoints = calculatedMemberPoints;
+      if (finalRating === 'سيء' && departmentRankInfo.punish === 'demote') demoteUsers.push(formattedMentionForEvent(data.id));
+      if (finalRating === 'سيء' && departmentRankInfo.punish === 'dismiss') dismissUsers.push(formattedMentionForEvent(data.id));
+      const sectionPointValue = parseInt(sectionPoints, 10) || 0;
+      if (departmentRankInfo.points && finalRating !== 'خارج خدمة' && sectionPointValue > 0) {
+        pointCategories[Math.min(sectionPointValue, 3)].push(formattedMentionForEvent(data.id));
+      }
+
       if (finalRating === 'جديد') {
         countNew++;
       } else if (finalRating === 'خارج خدمة') {
@@ -1019,7 +1367,8 @@ document.addEventListener('DOMContentLoaded', function () {
       const roleMentionForOutput = detectedRoleMention || cfg.outRoleMention;
       const formattedMention = formatEventUserMention(data.id);
       const evaluationOutput = shouldMentionOutOfServiceRole ? roleMentionForOutput : finalRating;
-      result += `${formattedMention}\nالتقييم : ${evaluationOutput}\nالرتبة الادارية : ${cleanRank}\n${lineSeparator}\n`;
+      result += `الايدي : ${data.id.trim()}\nعدد الفعاليات : ${data.events}\nرتبة القسم : ${departmentRankInfo.role}\nبوينتات القسم : ${sectionPoints}\nالبوينتات : ${memberPoints}\nالتقييم : ${sectionRes.text}\nالتقييم بالمسؤوليات : ${data.respEval}\nالرتبة الادارية : ${cleanRank}\nالتقيم النهائي : ${evaluationOutput}\n${lineSeparator}\n`;
+      finalInventory += `${formattedMention}\nالتقييم : ${evaluationOutput}\nالرتبة الادارية : ${cleanRank}\n${lineSeparator}\n`;
     });
 
     const duplicateEntries = Object.keys(idTracker)
@@ -1033,113 +1382,137 @@ document.addEventListener('DOMContentLoaded', function () {
       `**هل يوجد ملاحظة بالقسم او حاب تطور شي من جميع نواحي :  لايوجد يعطيكم العافيية    **\n\n` +
       `**تم انشاء التقرير من قبل :{ ${authorName} }**`;
 
+    const pointsOutput = buildEventPointsText(pointCategories);
+    const demoteOutput = buildEventPenaltyText(demoteUsers, 'كسر');
+    const dismissOutput = buildEventPenaltyText(dismissUsers, 'اعفاء');
+
     return {
       output: result,
       report,
       total: processedCount,
-      duplicates: duplicateEntries
+      duplicates: duplicateEntries,
+      pointsOutput,
+      demoteOutput,
+      dismissOutput,
+      finalInventory
     };
   }
 
-  function buildScenarioSectionResult(input, authorName, cfg) {
-    const lineSeparator = '`-----------------------------------------------------`';
+  function buildScenarioSectionResult(input, authorName, cfg, memberRanks = {}, responsibilityEvaluations = {}) {
+    const lineSeparator = '**==============**';
+    const finalInventorySeparator = '`-----------------------------------------------------`';
     let result = `${lineSeparator}\n`;
+    let finalInventory = `${finalInventorySeparator}\n`;
     let processedCount = 0;
-    let idTracker = {};
+    const idTracker = {};
     let countNew = 0;
     let countOut = 0;
     let countBad = 0;
     let countActive = 0;
+    const pointCategories = { 1: [], 2: [], 3: [] };
+    const demoteUsers = [];
+    const dismissUsers = [];
+    let reasonsOutput = '';
+    const records = parseScenarioRecords(input);
+    const responsibilityMap = getScenarioResponsibilityMap(document.querySelector('.module-responsibilities')?.value || '');
 
-    const entries = input.split(cfg.splitRegex);
-
-    entries.forEach((entry) => {
-      if (!entry || !entry.trim()) return;
-      if (!entry.includes('منشن الشخص')) return;
-
-      let data = { userMention: '', userId: '', rank: '', finalEval: '', rawEval: '' };
-      const lines = entry.split(/\r?\n/);
-
-      lines.forEach((line) => {
-        if (!line.includes(':')) return;
-        const parts = line.split(':');
-        const key = parts[0].trim();
-        const val = parts.slice(1).join(':').trim();
-
-        if (key === 'منشن الشخص') data.userMention = val;
-        else if (key === 'الايدي') data.userId = val;
-        else if (key === 'الرتبة ادارية' || key === 'الرتبة الادارية' || key === 'الرتبة  الادارية' || key.includes('الرتبة')) {
-          data.rank = val;
-        } else if (key === 'التقيم النهائي' || key === 'التقييم النهائي') {
-          data.finalEval = val;
-        } else if (key === 'التقييم' || key === 'التقيم') {
-          data.rawEval = val;
-        }
-      });
-
-      const source = data.userMention || data.discordIdentifier || data.username || data.userId || '';
-      if (!source) return;
-
+    records.forEach((data) => {
+      const userId = data.identity;
+      const mention = preserveScenarioMention(data.mention, data.identity);
+      const departmentRankInfo = scenarioRankInfo(memberRanks[userId] || '');
+      const administrativeRankInfo = eventRankInfo(data.adminRank);
+      const responsibilities = responsibilityMap[userId] || {};
+      const hoursMinutes = [data.thiefHours, data.scenarioHours, data.generalHours].reduce((sum, value) => sum + parseScenarioHours(value), 0);
+      const totalMinutes = hoursMinutes || parseScenarioHours(data.totalHours);
+      const creditedHours = Math.floor(totalMinutes / 60) + (totalMinutes % 60 > 30 ? 1 : 0);
+      const hoursPoints = creditedHours * 30;
+      const scenarioPoints = parseScenarioTriple(data.jewelry).reduce((sum, value) => sum + value, 0) * 5 + parseScenarioTriple(data.central).reduce((sum, value) => sum + value, 0) * 6 + parseScenarioTriple(data.home).reduce((sum, value) => sum + value, 0) * 3 + parseScenarioNumber(data.common) * 8;
+      const hoursBonus = totalMinutes >= 16 * 60 ? 50 : 0;
+      const monitoredScenarios = parseScenarioNumber(data.common) + parseScenarioTriple(data.jewelry).reduce((sum, value) => sum + value, 0) + parseScenarioTriple(data.central).reduce((sum, value) => sum + value, 0) + parseScenarioTriple(data.home).reduce((sum, value) => sum + value, 0);
+      const photosBonus = monitoredScenarios >= 400 ? 50 : 0;
+      const responsibilityPoints = scenarioResponsibilityPoints(responsibilities.leaves, 50) +
+        scenarioResponsibilityPoints(responsibilities.logs, 75) +
+        scenarioResponsibilityPoints(responsibilities.images, 75) +
+        scenarioResponsibilityPoints(responsibilities.notes, 75) +
+        scenarioResponsibilityPoints(responsibilities.attendance, 100) +
+        scenarioResponsibilityPoints(responsibilities.inventory, 150) +
+        scenarioResponsibilityPoints(responsibilities.responsibilitySupervisor, 200);
+      const extraPoints = hoursBonus + photosBonus + responsibilityPoints;
+      const totalPoints = hoursPoints + scenarioPoints + extraPoints;
+      const baseGrade = scenarioGradeFromPoints(totalPoints);
+      const individualResponsibilityValues = [responsibilities.images, responsibilities.notes, responsibilities.leaves, responsibilities.warnings]
+        .map(scenarioResponsibilityGrade)
+        .filter(Boolean);
+      const responsibilityValues = individualResponsibilityValues;
+      const highestResponsibility = responsibilityValues.slice().sort((left, right) => scenarioGradeRank(right) - scenarioGradeRank(left))[0] || 'لايوجد مسؤوليات';
+      const badResponsibilityCount = individualResponsibilityValues.filter((value) => value === 'سيء').length;
+      const responsibilityGrade = badResponsibilityCount > 0
+        ? lowerScenarioGradeByCount(highestResponsibility, badResponsibilityCount)
+        : highestResponsibility;
+      const sourceText = [data.rawGrade, data.adminRank, data.mention, data.id].join(' ');
+      const isOutOfService = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(sourceText) || sourceText.includes(cfg.outRoleId) || sourceText.includes(cfg.outRoleMention);
+      let finalRating = isOutOfService ? cfg.outRoleMention : calculateScenarioFinalGrade(baseGrade, responsibilityGrade, badResponsibilityCount);
+      const rawKey = userId || data.mention;
+      idTracker[rawKey] = (idTracker[rawKey] || 0) + 1;
       processedCount++;
 
-      const rawKey = String(source).replace(/[^0-9]/g, '');
-      if (rawKey && rawKey.length >= 17) {
-        idTracker[rawKey] = (idTracker[rawKey] || 0) + 1;
+      if (isOutOfService) countOut++;
+      else if (finalRating === 'سيء') countBad++;
+      else if (finalRating === 'جيد جدا' || finalRating === 'ممتاز' || finalRating === 'ممتاز جدا') countActive++;
+      const pointValue = finalRating.includes('ممتاز جدا') ? 2 : finalRating.includes('ممتاز') || finalRating.includes('جيد جدا') ? 1 : 0;
+      if (departmentRankInfo.points && !isOutOfService && pointValue) pointCategories[pointValue].push(mention);
+      if (!isOutOfService && finalRating === 'سيء' && departmentRankInfo.punish === 'demote') demoteUsers.push(mention);
+      if (!isOutOfService && finalRating === 'سيء' && departmentRankInfo.punish === 'dismiss') dismissUsers.push(mention);
+
+      const cleanRank = cleanAndStandardizeRank(data.adminRank);
+      const jewelryTotal = parseScenarioTriple(data.jewelry).reduce((sum, value) => sum + value, 0);
+      const centralTotal = parseScenarioTriple(data.central).reduce((sum, value) => sum + value, 0);
+      const homeTotal = parseScenarioTriple(data.home).reduce((sum, value) => sum + value, 0);
+      const reasons = [];
+      if (hoursPoints) reasons.push(`الساعات: ${hoursPoints} نقطة`);
+      if (data.common) reasons.push(`مراقبة السيناريو المشترك: ${data.common} × 8 = ${data.common * 8}`);
+      if (jewelryTotal) reasons.push(`مراقبة المجوهرات والبنوك واليخت: ${jewelryTotal} × 5 = ${jewelryTotal * 5}`);
+      if (centralTotal) reasons.push(`مراقبة البنك المركزي والمترو والاستوديو: ${centralTotal} × 6 = ${centralTotal * 6}`);
+      if (homeTotal) reasons.push(`مراقبة المنزل والبقالة والمصرف: ${homeTotal} × 3 = ${homeTotal * 3}`);
+      if (hoursBonus) reasons.push('بونص إتمام 16 ساعة: 50 نقطة');
+      if (photosBonus) reasons.push('بونص إتمام 400 مراقبة: 50 نقطة');
+      if (responsibilityPoints) reasons.push(`نقاط المسؤوليات: ${responsibilityPoints}`);
+      reasonsOutput += `${mention}\n${reasons.join('\n') || 'لا توجد نقاط مستحقة'}\nإجمالي البوينتات: ${totalPoints}\n\n`;
+      const isMember = departmentRankInfo.role === scenarioDepartmentRoles.member;
+      const displayId = data.id || '';
+      if (isMember) {
+        result += `منشن الشخص : ${mention}\nالايدي : ${displayId}\nالرتبة الادارية : ${cleanRank}\nعدد مراقبة المجوهرات + البنوك + اليخت : ${data.jewelry || '0-0-0'}\nعدد مراقبة سيناريوهات البنك المركزي + الميترو + الاستوديو : ${data.central || '0-0-0'}\nعدد مراقبة سرقة المنزل + بقالة + مصرف : ${data.home || '0-0-0'}\nمجموع الصور للسرقات : ${data.stolenPhotos}\nمجموع البوينتات : ${totalPoints}\nالتقييم : ${baseGrade}\nالتقيم النهائي : ${finalRating}\n${lineSeparator}\n`;
+      } else {
+        result += `منشن الشخص : ${mention}\nالايدي : ${displayId}\nساعات مراقب سرقات : ${data.thiefHours}\nساعات مراقب سيناريوهات : ${data.scenarioHours}\nساعات مراقب عام : ${data.generalHours}\nمجموع الساعات : ${Math.floor(totalMinutes / 60)}س ${totalMinutes % 60}د\nهل أكمل 4 ساعات بـ كل روم ؟ : ${data.completedRooms}\nعدد مراقبة السيناريو المشترك : ${data.common}\nعدد مراقبة المجوهرات + البنوك + اليخت : ${data.jewelry || '0-0-0'}\nعدد مراقبة سيناريوهات البنك المركزي + الميترو + الاستوديو : ${data.central || '0-0-0'}\nعدد مراقبة سرقة المنزل + بقالة + مصرف : ${data.home || '0-0-0'}\nاجمالي نقاط السيناريوهات : ${scenarioPoints}\nنقاط إضافية للساعات : ${hoursBonus}\nنقاط إضافية للصور : ${photosBonus}\nنقاط المسؤوليات : ${responsibilityPoints}\nاجمالي البوينتات : ${totalPoints}\nالرتبة الادارية : ${cleanRank}\nالتقييم : ${baseGrade}\nتقيم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalRating}\n${lineSeparator}\n`;
       }
-
-      const cleanRank = cleanAndStandardizeRank(data.rank);
-      const evalText = String(data.finalEval || data.rawEval || 'سيء');
-      const compactEval = evalText.replace(/\s+/g, '');
-      const roleMentionInEval = evalText.match(/<@&\d{17,20}>/);
-      const roleMentionValue = roleMentionInEval ? roleMentionInEval[0] : '';
-      const isOutOfService =
-        /خارج\s*الخدمة|خارج\s*خدمة|إجازة/i.test(evalText) ||
-        /<@&\d{17,20}>/.test(evalText) ||
-        compactEval.includes(cfg.outRoleId) ||
-        compactEval.includes(cfg.outRoleMention.replace(/\s+/g, ''));
-
-      let finalRating = data.finalEval || data.rawEval || 'سيء';
-
-      if (finalRating.includes('جديد')) {
-        countNew++;
-      } else if (isOutOfService || finalRating.includes('إجازة')) {
-        countOut++;
-        finalRating = roleMentionValue || cfg.outRoleMention;
-      } else if (finalRating.includes('سيء') || finalRating.includes('سئ')) {
-        countBad++;
-      } else if (['جيد جدا', 'ممتاز', 'ممتاز جدا'].some((r) => finalRating.includes(r))) {
-        countActive++;
-      }
-
-      const formattedMention = formatUserMention(source);
-      result += `${formattedMention || (data.username || 'غير متاح')}\nالتقييم : ${finalRating}\nالرتبة الادارية : ${cleanRank}\n${lineSeparator}\n`;
+      finalInventory += `${mention}\nالتقييم : ${finalRating}\nالرتبة الادارية : ${cleanRank}\n${finalInventorySeparator}\n`;
     });
-
-    const duplicateEntries = Object.keys(idTracker)
-      .filter((key) => idTracker[key] > 1)
-      .map((key) => ({ id: key, count: idTracker[key] }));
-    const weeklyReport = buildWeeklyReport(processedCount, countNew, countOut, countBad, countActive, authorName);
 
     return {
       output: result,
-      report: weeklyReport,
+      report: buildWeeklyReport(processedCount, countNew, countOut, countBad, countActive, authorName),
       total: processedCount,
-      duplicates: duplicateEntries
+      duplicates: Object.keys(idTracker).filter((key) => idTracker[key] > 1).map((key) => ({ id: key, count: idTracker[key] })),
+      pointsOutput: buildScenarioPointsText(pointCategories),
+      demoteOutput: buildScenarioPenaltyText(demoteUsers, 'كسر'),
+      dismissOutput: buildScenarioPenaltyText(dismissUsers, 'اعفاء'),
+      reasonsOutput,
+      finalInventory
     };
   }
 
-  function processModuleData(input, authorName, moduleKey) {
+  function processModuleData(input, authorName, moduleKey, responsibilityEvaluations = {}) {
     const cfg = moduleDefs[moduleKey] || moduleDefs.events;
     if (!input.trim()) {
       return { output: '', report: '', total: 0, duplicates: [] };
     }
 
     if (moduleKey === 'events') {
-      return buildEventSectionResult(input, authorName, cfg);
+      return buildEventSectionResult(input, authorName, cfg, getEventMemberRanks(), responsibilityEvaluations);
     }
 
     if (moduleKey === 'scenario') {
-      return buildScenarioSectionResult(input, authorName, cfg);
+      return buildScenarioSectionResult(input, authorName, cfg, getScenarioMemberRanks(), responsibilityEvaluations);
     }
 
     if (moduleKey === 'interviews') {
@@ -1426,28 +1799,49 @@ const source = data.userMention || data.userId || data.username || data.discordI
     const inventoryPanel = moduleContent.querySelector('.subtab-panel[data-panel="inventory"]');
     const input = inventoryPanel ? inventoryPanel.querySelector('.module-input') : moduleContent.querySelector('.module-input');
     const output = inventoryPanel ? inventoryPanel.querySelector('.module-output') : moduleContent.querySelector('.module-output');
+    const reasonsOutput = inventoryPanel ? inventoryPanel.querySelector('.module-reasons-output') : moduleContent.querySelector('.module-reasons-output');
+    const finalOutput = inventoryPanel ? inventoryPanel.querySelector('.module-final-output') : moduleContent.querySelector('.module-final-output');
     const report = inventoryPanel ? inventoryPanel.querySelector('.module-report') : moduleContent.querySelector('.module-report');
     const authorInput = inventoryPanel ? inventoryPanel.querySelector('.module-author') : moduleContent.querySelector('.module-author');
     const totalCount = inventoryPanel ? inventoryPanel.querySelector('.stats-count') : moduleContent.querySelector('.stats-count');
     const duplicateAlert = inventoryPanel ? inventoryPanel.querySelector('.stats-duplicates') : moduleContent.querySelector('.stats-duplicates');
+    const membersField = moduleContent.querySelector('.module-members');
+    const responsibilitiesField = moduleContent.querySelector('.module-responsibilities');
 
     if (!input || !output || !report || !authorInput || !totalCount || !duplicateAlert) {
       return;
     }
 
     const processCurrentModule = () => {
-      const result = processModuleData(input.value, authorInput.value.trim(), moduleKey);
+      let result;
+      try {
+        result = processModuleData(input.value, authorInput.value.trim(), moduleKey, getResponsibilityEvaluations());
+      } catch (error) {
+        console.error('Module processing failed:', error);
+        output.value = `تعذر تجهيز المخرجات: ${error.message || 'خطأ غير معروف'}`;
+        if (finalOutput) finalOutput.value = '';
+        report.value = '';
+        totalCount.textContent = 'إجمالي العدد: 0';
+        return;
+      }
       output.value = result.output;
+      if (reasonsOutput) reasonsOutput.value = moduleKey === 'scenario' ? (result.reasonsOutput || '') : '';
+      if (finalOutput) finalOutput.value = result.finalInventory || result.output;
       report.value = result.report;
       totalCount.textContent = `إجمالي العدد: ${result.total}`;
 
       if (moduleKey === 'events' || moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'interviews' || moduleKey === 'ban' || moduleKey === 'roles') {
+        if ((moduleKey === 'events' || moduleKey === 'scenario') && result.pointsOutput) {
+          moduleContent.querySelector('.points-output').value = result.pointsOutput;
+          moduleContent.querySelector('.demote-output').value = result.demoteOutput;
+          moduleContent.querySelector('.dismiss-output').value = result.dismissOutput;
+        }
         const records = parseEventBlocks(input.value, moduleKey);
         const pointsOutput = moduleContent.querySelector('.points-output');
         const demoteOutput = moduleContent.querySelector('.demote-output');
         const dismissOutput = moduleContent.querySelector('.dismiss-output');
 
-        if (pointsOutput) {
+        if (pointsOutput && moduleKey !== 'events' && moduleKey !== 'scenario') {
           if (moduleKey === 'scenario') {
             pointsOutput.value = buildScenarioPointsSurvey(records);
           } else if (moduleKey === 'raqabh') {
@@ -1462,7 +1856,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
             pointsOutput.value = buildEventPointsSurvey(records, authorInput.value.trim());
           }
         }
-        if (demoteOutput) {
+        if (demoteOutput && moduleKey !== 'events' && moduleKey !== 'scenario') {
           if (moduleKey === 'scenario') {
             demoteOutput.value = buildScenarioDemoteSurvey(records);
           } else if (moduleKey === 'raqabh') {
@@ -1477,7 +1871,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
             demoteOutput.value = buildEventDemoteSurvey(records);
           }
         }
-        if (dismissOutput) {
+        if (dismissOutput && moduleKey !== 'events' && moduleKey !== 'scenario') {
           if (moduleKey === 'scenario') {
             dismissOutput.value = buildScenarioDismissSurvey(records);
           } else if (moduleKey === 'raqabh') {
@@ -1522,9 +1916,12 @@ const source = data.userMention || data.userId || data.username || data.discordI
     });
 
     authorInput.addEventListener('input', processCurrentModule);
+    membersField?.addEventListener('input', processCurrentModule);
+    responsibilitiesField?.addEventListener('input', processCurrentModule);
 
     const processBtn = moduleContent.querySelector('.action-process');
     const copyOutputBtn = moduleContent.querySelector('.action-copy-output');
+    const copyFinalBtn = moduleContent.querySelector('.action-copy-final');
     const copyReportBtn = moduleContent.querySelector('.action-copy-report');
     const clearBtn = moduleContent.querySelector('.action-clear');
     const copyPointsBtn = moduleContent.querySelector('.action-copy-points');
@@ -1536,6 +1933,10 @@ const source = data.userMention || data.userId || data.username || data.discordI
     copyOutputBtn?.addEventListener('click', () => {
       copyText(output.value);
       showToast('تم نسخ الجرد');
+    });
+    copyFinalBtn?.addEventListener('click', () => {
+      copyText(finalOutput?.value || '');
+      showToast('تم نسخ الجرد النهائي');
     });
     copyReportBtn?.addEventListener('click', () => {
       copyText(report.value);
@@ -1564,6 +1965,8 @@ const source = data.userMention || data.userId || data.username || data.discordI
     clearBtn?.addEventListener('click', () => {
       input.value = '';
       output.value = '';
+      if (reasonsOutput) reasonsOutput.value = '';
+      if (finalOutput) finalOutput.value = '';
       report.value = '';
       authorInput.value = '';
       totalCount.textContent = 'إجمالي العدد: 0';
@@ -1573,6 +1976,8 @@ const source = data.userMention || data.userId || data.username || data.discordI
       moduleContent.querySelectorAll(`[data-sync-group="${moduleKey}-shared"]`).forEach((field) => {
         field.value = '';
       });
+      if (membersField) membersField.value = '';
+      if (responsibilitiesField) responsibilitiesField.value = '';
     });
 
     processCurrentModule();
@@ -1613,6 +2018,11 @@ const source = data.userMention || data.userId || data.username || data.discordI
             </div>
 
             <div class="module-card">
+              <label>تقييم المسؤوليات</label>
+              <textarea class="module-responsibilities" placeholder="منشن العضو : تقييم المسؤوليات\n\nأو\n\nالايدي : 123...\nالتقييم بالمسؤوليات : ممتاز"></textarea>
+            </div>
+
+            <div class="module-card">
               <label>${activeDef.outputLabel}</label>
               <textarea class="module-output" readonly placeholder="ستظهر النتيجة هنا..."></textarea>
               <div class="stats-bar">
@@ -1620,6 +2030,22 @@ const source = data.userMention || data.userId || data.username || data.discordI
                 <div class="stats-duplicates" style="display: none;"></div>
               </div>
             </div>
+
+            ${safeKey === 'scenario' ? `
+            <div class="module-card">
+              <label>السبب</label>
+              <textarea class="module-reasons-output" readonly placeholder="سيظهر سبب احتساب البوينتات هنا..."></textarea>
+            </div>` : ''}
+          </div>
+
+          <div class="module-card full-width">
+            <label>الجرد النهائي</label>
+            <textarea class="module-final-output" readonly placeholder="سيظهر الجرد النهائي هنا..."></textarea>
+          </div>
+
+          <div class="module-card full-width">
+            <label>أعضاء القسم ورتبهم من الهيدرات</label>
+            <textarea class="module-members" placeholder="➜ <@&ROLE_ID>\n- <@USER_ID>"></textarea>
           </div>
 
           <div class="module-card full-width">
@@ -1634,6 +2060,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
           <div class="module-actions">
             <button class="primary action-process" type="button">معالجة وتحديث</button>
             <button class="secondary action-copy-output" type="button">نسخ الجرد</button>
+            <button class="secondary action-copy-final" type="button">نسخ الجرد النهائي</button>
             <button class="secondary action-copy-report" type="button">نسخ التقرير الأسبوعي</button>
             <button class="secondary action-clear" type="button">مسح الكل</button>
           </div>
@@ -1643,7 +2070,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
           <div class="mini-form-card">
             <h3>🎁 استبيان البوينتات</h3>
             <div class="points-layout">
-              <textarea class="points-input" data-sync-group="${safeKey}-shared" placeholder="ادخل أسماء الأعضاء + نقاطهم (1، 2، 3) مع استبعاد الإدارة..."></textarea>
+              <textarea class="points-input" placeholder="تظهر هنا نتيجة البوينتات المحسوبة تلقائيًا..."></textarea>
               <textarea class="points-output" readonly placeholder="سوف تظهر نتيجة استبيان البوينتات هنا..."></textarea>
             </div>
             <div class="mini-form-actions">
@@ -1655,7 +2082,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
         <div class="subtab-panel" data-panel="accounting">
           <div class="mini-form-card">
             <h3>⚠️ المحاسبة - الكسر والإعفاء</h3>
-            <textarea class="accounting-input" data-sync-group="${safeKey}-shared" placeholder="أدخل تقييمات المشرفين والمساعد المسؤول / الأعضاء المعفون..."></textarea>
+            <textarea class="accounting-input" placeholder="تظهر هنا نتائج المحاسبة المحسوبة تلقائيًا..."></textarea>
             <div class="accounting-grid">
               <div class="accounting-box">
                 <label>استبيان الكسر</label>
