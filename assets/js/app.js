@@ -393,6 +393,66 @@ document.addEventListener('DOMContentLoaded', function () {
       `تم انشاء التقرير من قبل : ( ${authorName} ) **`;
   }
 
+  function buildFinalInventoryOutput(inventoryOutput) {
+    const separator = '`-----------------------------------------------------`';
+    const entries = String(inventoryOutput || '').split(/\*\*==============\*\*|`-+`/g);
+    let result = `${separator}\n`;
+
+    entries.forEach((entry) => {
+      const lines = entry.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      if (!lines.length) return;
+
+      const mentionLine = lines.find((line) => /^منشن الشخص\s*:/.test(line));
+      const evaluationLine = lines.find((line) => /^التقييم\s*:|^التقيم\s+النهائي\s*:|^التقييم\s+النهائي\s*:/.test(line));
+      const rankLine = lines.find((line) => /^الرتبة\s+الادارية\s*:|^الرتبة\s+إدارية\s*:/.test(line));
+      const plainMention = lines.find((line) => !line.includes(':') && (/<@!?\d{17,20}>/.test(line) || line.startsWith('@')));
+      const mention = mentionLine ? mentionLine.replace(/^منشن الشخص\s*:\s*/, '') : plainMention;
+      const evaluation = evaluationLine ? evaluationLine.replace(/^.*?:\s*/, '') : '';
+      const rank = rankLine ? rankLine.replace(/^.*?:\s*/, '') : '';
+
+      if (mention) result += `${mention}\nالتقييم : ${evaluation}\nالرتبة الادارية : ${rank}\n${separator}\n`;
+    });
+
+    return result;
+  }
+
+  function buildDepartmentReasons(inventoryOutput, moduleKey) {
+    const labels = {
+      events: 'الفعاليات',
+      interviews: 'استبيان الانترفيو',
+      raqabh: 'استبيان الرقابة',
+      roles: 'استبيان الرولز',
+      ban: 'استبيان الباند'
+    };
+    const entries = String(inventoryOutput || '').split(/\*\*==============\*\*|`-+`/g);
+    const reasons = [];
+
+    entries.forEach((entry) => {
+      const lines = entry.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const evaluationLine = lines.find((line) => /^التقييم\s*:|^التقيم\s+النهائي\s*:|^التقييم\s+النهائي\s*:/.test(line));
+      const evaluation = evaluationLine ? evaluationLine.replace(/^.*?:\s*/, '') : '';
+      const identity = lines.find((line) => /^منشن الشخص\s*:/.test(line))?.replace(/^منشن الشخص\s*:\s*/, '') ||
+        lines.find((line) => !line.includes(':') && (/<@!?\d{17,20}>/.test(line) || line.startsWith('@'))) ||
+        formatUserMention(lines.find((line) => /^الايدي\s*:/.test(line))?.replace(/^الايدي\s*:\s*/, ''));
+      if (!identity || !evaluation) return;
+
+      let reason = `${labels[moduleKey] || 'التقييم'}: ${evaluation}`;
+      if (moduleKey === 'events') {
+        const events = lines.find((line) => /^عدد الفعاليات\s*:/.test(line))?.replace(/^عدد الفعاليات\s*:\s*/, '') || '0';
+        const responsibility = lines.find((line) => /^التقييم بالمسؤوليات\s*:|^التقيم بالمسؤوليات\s*:/.test(line))?.replace(/^.*?:\s*/, '') || 'لايوجد مسؤوليات';
+        const finalEvaluation = lines.find((line) => /^التقيم\s+النهائي\s*:|^التقييم\s+النهائي\s*:/.test(line))?.replace(/^.*?:\s*/, '') || evaluation;
+        const sectionEvaluation = lines.find((line) => /^التقييم\s*:/.test(line))?.replace(/^.*?:\s*/, '') || 'غير متاح';
+        reason = `التقييم النهائي ${finalEvaluation} لأن تقييم الفعاليات ${sectionEvaluation} من ${events} فعالية، وتقييم المسؤوليات ${responsibility}`;
+      }
+      if (/خارج\s*خدمة|إجازة|<@&\d{17,20}>/.test(evaluation)) reason = 'التقييم خارج الخدمة لأن الاستبيان يحتوي إجازة أو خارج الخدمة';
+      else if (/سيء|سئ|عدم تفاعل/.test(evaluation)) reason = 'التقييم سيء لأن التقييم النهائي أو التقييم في الاستبيان مسجل سيء أو عدم تفاعل';
+      else if (moduleKey !== 'events' && /جيد\s*جدا|ممتاز/.test(evaluation)) reason = `التقييم ${evaluation} لأنه مأخوذ من التقييم النهائي في الاستبيان، أو من التقييم عند عدم وجود نهائي`;
+      reasons.push(`${identity}\n${reason}`);
+    });
+
+    return reasons.join('\n\n');
+  }
+
   const eventDepartmentRoles = {
     boss: '<@&1135000856417292360>',
     deputyBoss: '<@&1135000856379531336>',
@@ -414,6 +474,25 @@ document.addEventListener('DOMContentLoaded', function () {
     deputySupervisor: '<@&1480410144474009723>',
     member: '<@&1480356635355512963>'
   };
+
+  const raqabhDepartmentRoles = {
+    boss: '<@&1135000856379531344>',
+    deputyBoss: '<@&1135000856304042013>',
+    supervisorA: '<@&1135000856144658450>',
+    deputySupervisorA: '<@&1135000856144658449>',
+    assistantSupervisor: '<@&1267293821687955617>',
+    supervisor: '<@&1135000856144658448>',
+    deputySupervisor: '<@&1135000856144658447>',
+    member: '<@&1135000856144658444>'
+  };
+
+  function raqabhRankInfo(rankText) {
+    const text = String(rankText || '');
+    if (/1135000856379531344|1135000856304042013|1135000856144658450|1135000856144658449/.test(text)) return { role: raqabhDepartmentRoles.boss, points: false, punish: 'none', kind: 'leader' };
+    if (/1267293821687955617|مساعد/.test(text)) return { role: raqabhDepartmentRoles.assistantSupervisor, points: false, punish: 'demote', kind: 'assistant' };
+    if (/1135000856144658448|1135000856144658447|مشرف/.test(text)) return { role: raqabhDepartmentRoles.supervisor, points: true, punish: 'demote', kind: 'supervisor' };
+    return { role: raqabhDepartmentRoles.member, points: true, punish: 'dismiss', kind: 'member' };
+  }
 
   function scenarioRankInfo(rankText) {
     const text = String(rankText || '').trim();
@@ -505,6 +584,22 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       const userId = extractDiscordId(text);
       if (userId) map[userId] = currentRole;
+    });
+    return map;
+  }
+
+  function getRaqabhMemberRanks() {
+    const field = moduleContent.querySelector('.module-members');
+    const map = {};
+    if (!field || !field.value.trim()) return map;
+    let currentRole = raqabhDepartmentRoles.member;
+    field.value.split(/\r?\n/).forEach((line) => {
+      const roles = line.match(/<@&\d{17,20}>/g);
+      if (roles && (line.includes('➜') || line.includes('<@&'))) currentRole = roles[roles.length - 1];
+      else {
+        const userId = extractDiscordId(line);
+        if (userId) map[userId] = currentRole;
+      }
     });
     return map;
   }
@@ -710,6 +805,128 @@ document.addEventListener('DOMContentLoaded', function () {
       if (record.identity) records.push(record);
     });
     return records;
+  }
+
+  function getRaqabhResponsibilityMap(rawText) {
+    const map = {};
+    String(rawText || '').split(/={3,}/).forEach((block) => {
+      const values = {};
+      let userId = '';
+      block.split(/\r?\n/).forEach((line) => {
+        const separator = line.indexOf(':');
+        if (separator < 0) return;
+        const key = line.slice(0, separator).trim();
+        const value = line.slice(separator + 1).trim();
+        userId = userId || extractDiscordId(value) || extractDiscordId(key);
+        if (/مسؤول الاجازات|مسوؤل الاجازات/.test(key)) values.leaves = value;
+        else if (/مراقبه الرقابين|مراقبة الرقابين/.test(key)) values.monitors = value;
+        else if (/مراقبة اللوقات/.test(key)) values.logs = value;
+        else if (/دفتر الحضور/.test(key)) values.attendance = value;
+        else if (/مسؤول الجرد/.test(key)) values.inventory = value;
+        else if (/مشرف المسؤوليات/.test(key)) values.supervisor = value;
+        else if (/تدقيق السجون/.test(key)) values.prisons = value;
+      });
+      if (userId) map[userId] = values;
+    });
+    return map;
+  }
+
+  function buildRaqabhSectionResult(input, authorName, cfg, memberRanks = {}) {
+    const separator = '**==============**';
+    const finalSeparator = '`-----------------------------------------------------`';
+    let output = `${separator}\n`;
+    let finalInventory = `${finalSeparator}\n`;
+    const points = { 1: [], 2: [] };
+    const demote = [];
+    const dismiss = [];
+    let reasonsOutput = '';
+    let total = 0;
+    let bad = 0;
+    let active = 0;
+    const responsibilityMap = getRaqabhResponsibilityMap(document.querySelector('.module-responsibilities')?.value || '');
+
+    String(input || '').split(/(?=منشن\s*الشخص\s*:|الايدي\s*:)/).forEach((block) => {
+      if (!block.trim()) return;
+      const data = { mention: '', id: '', rank: '', ownership: '', private: '', general: '', totalHours: '', completedRooms: '', rawEval: '', finalEval: '' };
+      block.split(/\r?\n/).forEach((line) => {
+        const index = line.indexOf(':');
+        if (index < 0) return;
+        const key = line.slice(0, index).trim();
+        const value = line.slice(index + 1).trim();
+        if (/منشن\s*الشخص/.test(key)) data.mention = value;
+        else if (/^الايدي/.test(key)) data.id = value;
+        else if (/الرتبة\s*الادارية/.test(key)) data.rank = value;
+        else if (/مراقب الملكية|ساعات الملكية/.test(key)) data.ownership = value;
+        else if (/مراقب خصوصي/.test(key)) data.private = value;
+        else if (/مراقب عام/.test(key)) data.general = value;
+        else if (/مجموع الساعات/.test(key)) data.totalHours = value;
+        else if (/أكمل 4 ساعات/.test(key)) data.completedRooms = value;
+        else if (/التقييم النهائي|التقيم النهائي/.test(key)) data.finalEval = value;
+        else if (/^التقييم|^التقيم/.test(key)) data.rawEval = value;
+      });
+      const identity = extractDiscordId(data.mention) || extractDiscordId(data.id);
+      if (!identity) return;
+      const mention = preserveScenarioMention(data.mention, identity);
+      const rankInfo = raqabhRankInfo(memberRanks[identity] || '');
+      const totalMinutes = [data.ownership, data.private, data.general].reduce((sum, value) => sum + parseScenarioHours(value), 0) || parseScenarioHours(data.totalHours);
+      const hourlyRate = rankInfo.kind === 'member' ? 20 : 30;
+      const hoursPoints = (Math.floor(totalMinutes / 60) + (totalMinutes % 60 > 30 ? 1 : 0)) * hourlyRate;
+      const requiredRooms = rankInfo.kind === 'assistant'
+        ? [{ name: 'الملكية', value: data.ownership }, { name: 'خصوصي', value: data.private }, { name: 'عام', value: data.general }]
+        : [];
+      const completedEveryRequiredRoom = requiredRooms.length > 0 && requiredRooms.every((room) => parseScenarioHours(room.value) >= 4 * 60);
+      const roomsBonus = completedEveryRequiredRoom ? 50 : 0;
+      const responsibilities = responsibilityMap[identity] || {};
+      const responsibilityValues = Object.values(responsibilities).map(scenarioResponsibilityGrade).filter(Boolean);
+      const highestResponsibility = responsibilityValues.slice().sort((left, right) => scenarioGradeRank(right) - scenarioGradeRank(left))[0] || 'لايوجد مسؤوليات';
+      const badResponsibilityCount = responsibilityValues.filter((value) => value === 'سيء').length;
+      const responsibilityGrade = badResponsibilityCount > 0 ? lowerScenarioGradeByCount(highestResponsibility, badResponsibilityCount) : highestResponsibility;
+      const responsibilityPoints = scenarioResponsibilityPoints(responsibilities.leaves, 50) +
+        scenarioResponsibilityPoints(responsibilities.monitors, 75) +
+        scenarioResponsibilityPoints(responsibilities.logs, 75) +
+        scenarioResponsibilityPoints(responsibilities.attendance, 100) +
+        scenarioResponsibilityPoints(responsibilities.inventory, 150) +
+        scenarioResponsibilityPoints(responsibilities.supervisor, 200);
+      const totalPoints = hoursPoints + roomsBonus + responsibilityPoints;
+      const evaluation = data.finalEval || data.rawEval || scenarioGradeFromPoints(totalPoints);
+      const isOut = /خارج\s*الخدمة|إجازة|اجازة/.test(evaluation);
+      const finalEvaluation = isOut ? cfg.outRoleMention : calculateScenarioFinalGrade(evaluation, responsibilityGrade, badResponsibilityCount);
+      total++;
+      if (/سيء|سئ|عدم تفاعل/.test(evaluation)) bad++;
+      else if (!isOut) active++;
+      const pointValue = /ممتاز\s*جدا/.test(evaluation) ? 2 : /ممتاز|جيد\s*جدا/.test(evaluation) ? 1 : 0;
+      if (rankInfo.points && !isOut && pointValue) points[pointValue].push(mention);
+      if (!isOut && /سيء|سئ|عدم تفاعل/.test(evaluation) && rankInfo.punish === 'demote') demote.push(mention);
+      if (!isOut && /سيء|سئ|عدم تفاعل/.test(evaluation) && rankInfo.punish === 'dismiss') dismiss.push(mention);
+      const cleanRank = cleanAndStandardizeRank(data.rank);
+      const requiredRoomsText = requiredRooms.length ? requiredRooms.map((room) => room.name).join('، ') : 'لا توجد رومز مطلوبة لهذه الرتبة';
+      reasonsOutput += `${mention}\nنقاط الساعات: ${hoursPoints}\nرومات هذه الرتبة: ${requiredRoomsText}\nبونص إكمال 4 ساعات بالرومات المطلوبة: ${roomsBonus}\nنقاط المسؤوليات: ${responsibilityPoints}\nالتقييم: ${evaluation}\nتقييم المسؤوليات: ${responsibilityGrade}\nالتقييم النهائي: ${finalEvaluation}\n\n`;
+      if (rankInfo.kind === 'assistant') output += `الايدي : ${data.id}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات مراقب الملكية : ${data.ownership}\nعدد ساعات مراقب خصوصي : ${data.private}\nعدد ساعات مراقب عام : ${data.general}\nمجموع البوينتات : ${totalPoints}\nالتقييم : ${evaluation}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      else if (rankInfo.kind === 'supervisor') output += `الايدي : ${data.id}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات مراقب الملكية : ${data.ownership}\nعدد ساعات مراقب خصوصي : ${data.private}\nمجموع البوينتات : ${totalPoints}\nالتقييم : ${evaluation}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      else if (rankInfo.kind === 'leader') output += `الايدي : ${data.id}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات الملكية : ${data.ownership}\nاجمالي البوينتات : ${totalPoints}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      else output += `الايدي : ${data.id}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات الملكية : ${data.ownership}\nاجمالي البوينتات : ${totalPoints}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      finalInventory += `${mention}\nالتقييم : ${finalEvaluation}\nالرتبة الادارية : ${cleanRank}\n${finalSeparator}\n`;
+    });
+
+    return {
+      output,
+      report: buildWeeklyReport(total, 0, 0, bad, active, authorName),
+      total,
+      duplicates: [],
+      pointsOutput: buildRaqabhPointsText(points),
+      demoteOutput: buildRaqabhPenaltyText(demote, 'كسر'),
+      dismissOutput: buildRaqabhPenaltyText(dismiss, 'اعفاء'),
+      reasonsOutput,
+      finalInventory
+    };
+  }
+
+  function buildRaqabhPointsText(points) {
+    return `بوينت واحد\n${points[1].join('\n') || 'لا يوجد'}\n\nبوينتين\n${points[2].join('\n') || 'لا يوجد'}`;
+  }
+
+  function buildRaqabhPenaltyText(users, action) {
+    return `يتم محاسبة المدعو:\n${users.join('\n') || 'لا يوجد'}\n\nالإجراء: ${action}\nالسبب: عدم تفاعل`;
   }
 
   function parseEventBlocks(input, moduleKey = 'events') {
@@ -1252,10 +1469,11 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function buildEventSectionResult(input, authorName, cfg, memberRanks = {}, responsibilityEvaluations = {}) {
-    const lineSeparator = '`-----------------------------------------------------`';
+    const lineSeparator = '**==============**';
+    const finalInventorySeparator = '`-----------------------------------------------------`';
     const blocks = input.split(/={3,}/);
     let result = `${lineSeparator}\n`;
-    let finalInventory = `${lineSeparator}\n`;
+    let finalInventory = `${finalInventorySeparator}\n`;
     let processedCount = 0;
     let idTracker = {};
     let countNew = 0;
@@ -1368,7 +1586,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const formattedMention = formatEventUserMention(data.id);
       const evaluationOutput = shouldMentionOutOfServiceRole ? roleMentionForOutput : finalRating;
       result += `الايدي : ${data.id.trim()}\nعدد الفعاليات : ${data.events}\nرتبة القسم : ${departmentRankInfo.role}\nبوينتات القسم : ${sectionPoints}\nالبوينتات : ${memberPoints}\nالتقييم : ${sectionRes.text}\nالتقييم بالمسؤوليات : ${data.respEval}\nالرتبة الادارية : ${cleanRank}\nالتقيم النهائي : ${evaluationOutput}\n${lineSeparator}\n`;
-      finalInventory += `${formattedMention}\nالتقييم : ${evaluationOutput}\nالرتبة الادارية : ${cleanRank}\n${lineSeparator}\n`;
+      finalInventory += `${formattedMention}\nالتقييم : ${evaluationOutput}\nالرتبة الادارية : ${cleanRank}\n${finalInventorySeparator}\n`;
     });
 
     const duplicateEntries = Object.keys(idTracker)
@@ -1477,6 +1695,10 @@ document.addEventListener('DOMContentLoaded', function () {
       if (hoursBonus) reasons.push('بونص إتمام 16 ساعة: 50 نقطة');
       if (photosBonus) reasons.push('بونص إتمام 400 مراقبة: 50 نقطة');
       if (responsibilityPoints) reasons.push(`نقاط المسؤوليات: ${responsibilityPoints}`);
+      reasons.push(`التقييم ${baseGrade} لأن إجمالي البوينتات ${totalPoints}`);
+      if (responsibilityGrade !== 'لايوجد مسؤوليات') reasons.push(`تقييم المسؤوليات ${responsibilityGrade}`);
+      if (finalRating !== baseGrade && !isOutOfService) reasons.push(`التقييم النهائي ${finalRating} بسبب تقييم المسؤوليات`);
+      if (isOutOfService) reasons.push('التقييم النهائي خارج الخدمة بسبب الإجازة أو خارج الخدمة');
       reasonsOutput += `${mention}\n${reasons.join('\n') || 'لا توجد نقاط مستحقة'}\nإجمالي البوينتات: ${totalPoints}\n\n`;
       const isMember = departmentRankInfo.role === scenarioDepartmentRoles.member;
       const displayId = data.id || '';
@@ -1515,8 +1737,12 @@ document.addEventListener('DOMContentLoaded', function () {
       return buildScenarioSectionResult(input, authorName, cfg, getScenarioMemberRanks(), responsibilityEvaluations);
     }
 
+    if (moduleKey === 'raqabh') {
+      return buildRaqabhSectionResult(input, authorName, cfg, getRaqabhMemberRanks());
+    }
+
     if (moduleKey === 'interviews') {
-      const lineSeparator = '`-----------------------------------------------------`';
+      const lineSeparator = '**==============**';
       let result = `${lineSeparator}\n`;
       let processedCount = 0;
       let idTracker = {};
@@ -1579,7 +1805,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (moduleKey === 'raqabh') {
-      const lineSeparator = '`-----------------------------------------------------`';
+      const lineSeparator = '**==============**';
       let result = `${lineSeparator}\n`;
       let processedCount = 0;
       let idTracker = {};
@@ -1646,7 +1872,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (moduleKey === 'interviews' || moduleKey === 'roles' || moduleKey === 'ban') {
-      const lineSeparator = '`-----------------------------------------------------`';
+      const lineSeparator = '**==============**';
       let result = `${lineSeparator}\n`;
       let processedCount = 0;
       let idTracker = {};
@@ -1825,13 +2051,15 @@ const source = data.userMention || data.userId || data.username || data.discordI
         return;
       }
       output.value = result.output;
-      if (reasonsOutput) reasonsOutput.value = moduleKey === 'scenario' ? (result.reasonsOutput || '') : '';
-      if (finalOutput) finalOutput.value = result.finalInventory || result.output;
+      if (reasonsOutput) reasonsOutput.value = moduleKey === 'scenario' || moduleKey === 'raqabh'
+        ? (result.reasonsOutput || '')
+        : buildDepartmentReasons(result.output, moduleKey);
+      if (finalOutput) finalOutput.value = result.finalInventory || buildFinalInventoryOutput(result.output);
       report.value = result.report;
       totalCount.textContent = `إجمالي العدد: ${result.total}`;
 
       if (moduleKey === 'events' || moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'interviews' || moduleKey === 'ban' || moduleKey === 'roles') {
-        if ((moduleKey === 'events' || moduleKey === 'scenario') && result.pointsOutput) {
+        if ((moduleKey === 'events' || moduleKey === 'scenario' || moduleKey === 'raqabh') && result.pointsOutput) {
           moduleContent.querySelector('.points-output').value = result.pointsOutput;
           moduleContent.querySelector('.demote-output').value = result.demoteOutput;
           moduleContent.querySelector('.dismiss-output').value = result.dismissOutput;
@@ -1841,7 +2069,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
         const demoteOutput = moduleContent.querySelector('.demote-output');
         const dismissOutput = moduleContent.querySelector('.dismiss-output');
 
-        if (pointsOutput && moduleKey !== 'events' && moduleKey !== 'scenario') {
+        if (pointsOutput && moduleKey !== 'events' && moduleKey !== 'scenario' && moduleKey !== 'raqabh') {
           if (moduleKey === 'scenario') {
             pointsOutput.value = buildScenarioPointsSurvey(records);
           } else if (moduleKey === 'raqabh') {
@@ -1856,7 +2084,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
             pointsOutput.value = buildEventPointsSurvey(records, authorInput.value.trim());
           }
         }
-        if (demoteOutput && moduleKey !== 'events' && moduleKey !== 'scenario') {
+        if (demoteOutput && moduleKey !== 'events' && moduleKey !== 'scenario' && moduleKey !== 'raqabh') {
           if (moduleKey === 'scenario') {
             demoteOutput.value = buildScenarioDemoteSurvey(records);
           } else if (moduleKey === 'raqabh') {
@@ -1871,7 +2099,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
             demoteOutput.value = buildEventDemoteSurvey(records);
           }
         }
-        if (dismissOutput && moduleKey !== 'events' && moduleKey !== 'scenario') {
+        if (dismissOutput && moduleKey !== 'events' && moduleKey !== 'scenario' && moduleKey !== 'raqabh') {
           if (moduleKey === 'scenario') {
             dismissOutput.value = buildScenarioDismissSurvey(records);
           } else if (moduleKey === 'raqabh') {
@@ -2031,11 +2259,10 @@ const source = data.userMention || data.userId || data.username || data.discordI
               </div>
             </div>
 
-            ${safeKey === 'scenario' ? `
             <div class="module-card">
               <label>السبب</label>
               <textarea class="module-reasons-output" readonly placeholder="سيظهر سبب احتساب البوينتات هنا..."></textarea>
-            </div>` : ''}
+            </div>
           </div>
 
           <div class="module-card full-width">
