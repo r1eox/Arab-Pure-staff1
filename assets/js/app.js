@@ -486,6 +486,44 @@ document.addEventListener('DOMContentLoaded', function () {
     member: '<@&1135000856144658444>'
   };
 
+  const banDepartmentRoles = {
+    boss: '<@&1135000856417292359>',
+    deputyBoss: '<@&1135000856379531335>',
+    supervisorA: '<@&1135000856215961658>',
+    deputySupervisorA: '<@&1135000856215961657>',
+    assistantSupervisor: '<@&1289692866267975700>',
+    supervisor: '<@&1135000856215961656>',
+    deputySupervisor: '<@&1135000856215961655>',
+    member: '<@&1135000856199188518>'
+  };
+
+  const interviewDepartmentRoles = {
+    boss: '<@&1135000856379531343>',
+    deputyBoss: '<@&1135000856304042012>',
+    supervisorA: '<@&1255700234382610435>',
+    deputySupervisorA: '<@&1135000855809114115>',
+    assistantSupervisor: '<@&1135000855767175284>',
+    supervisor: '<@&1135000855725219985>',
+    deputySupervisor: '<@&1135000855930753096>',
+    member: '<@&1135000855872020515>'
+  };
+
+  function banRankInfo(rankText) {
+    const text = String(rankText || '');
+    if (/1135000856417292359|1135000856379531335|1135000856215961658|1135000856215961657/.test(text)) return { role: banDepartmentRoles.boss, points: false, punish: 'none', kind: 'leader' };
+    if (/1289692866267975700|مساعد/.test(text)) return { role: banDepartmentRoles.assistantSupervisor, points: false, punish: 'demote', kind: 'assistant' };
+    if (/1135000856215961656|1135000856215961655|مشرف/.test(text)) return { role: banDepartmentRoles.supervisor, points: true, punish: 'demote', kind: 'supervisor' };
+    return { role: banDepartmentRoles.member, points: true, punish: 'dismiss', kind: 'member' };
+  }
+
+  function interviewRankInfo(rankText) {
+    const text = String(rankText || '');
+    if (/1135000856379531343|1135000856304042012|1255700234382610435|1135000855809114115/.test(text)) return { role: interviewDepartmentRoles.boss, points: false, punish: 'none', kind: 'leader' };
+    if (/1135000855767175284|مساعد/.test(text)) return { role: interviewDepartmentRoles.assistantSupervisor, points: false, punish: 'demote', kind: 'assistant' };
+    if (/1135000855725219985|1135000855930753096|مشرف/.test(text)) return { role: interviewDepartmentRoles.supervisor, points: true, punish: 'demote', kind: 'supervisor' };
+    return { role: interviewDepartmentRoles.member, points: true, punish: 'dismiss', kind: 'member' };
+  }
+
   function raqabhRankInfo(rankText) {
     const text = String(rankText || '');
     if (/1135000856379531344|1135000856304042013|1135000856144658450|1135000856144658449/.test(text)) return { role: raqabhDepartmentRoles.boss, points: false, punish: 'none', kind: 'leader' };
@@ -600,6 +638,41 @@ document.addEventListener('DOMContentLoaded', function () {
         const userId = extractDiscordId(line);
         if (userId) map[userId] = currentRole;
       }
+    });
+    return map;
+  }
+
+  function getBanMemberRanks() {
+    const field = moduleContent.querySelector('.module-members');
+    const map = {};
+    if (!field || !field.value.trim()) return map;
+    let currentRole = banDepartmentRoles.member;
+    field.value.split(/\r?\n/).forEach((line) => {
+      const roles = line.match(/<@&\d{17,20}>/g);
+      if (roles && (line.includes('➜') || line.includes('<@&'))) currentRole = roles[roles.length - 1];
+      else {
+        const userId = extractDiscordId(line);
+        if (userId) map[userId] = currentRole;
+      }
+    });
+    return map;
+  }
+
+  function getInterviewsMemberRanks() {
+    const field = moduleContent.querySelector('.module-members');
+    const map = {};
+    if (!field || !field.value.trim()) return map;
+    let currentRole = interviewDepartmentRoles.member;
+    field.value.split(/\r?\n/).forEach((line) => {
+      const text = line.trim();
+      if (!text) return;
+      const roles = text.match(/<@&\d{17,20}>/g);
+      if (roles && (text.includes('➜') || text.includes('<@&'))) {
+        currentRole = roles[roles.length - 1];
+        return;
+      }
+      const userId = extractDiscordId(text);
+      if (userId) map[userId] = currentRole;
     });
     return map;
   }
@@ -936,6 +1009,126 @@ document.addEventListener('DOMContentLoaded', function () {
       `**اسأل الله التوفيق لي ولكم التوفيق والسداد **\n\n**توقيع**\n- <@&1135000856379531344>\n- <@&1135000856304042013>\n\n|| <@&1135000856144658444> ||`;
   }
 
+  function banGradeFromPoints(points) {
+    if (points >= 200) return 'ممتاز جدا';
+    if (points >= 100) return 'ممتاز';
+    if (points >= 50) return 'جيد جدا';
+    if (points > 25) return '';
+    return 'سيء';
+  }
+
+  function getBanResponsibilityMap(rawText) {
+    const map = {};
+    String(rawText || '').split(/={3,}/).forEach((block) => {
+      const values = {};
+      let userId = '';
+      block.split(/\r?\n/).forEach((line) => {
+        const index = line.indexOf(':');
+        if (index < 0) return;
+        const key = line.slice(0, index).trim();
+        const value = line.slice(index + 1).trim();
+        userId = userId || extractDiscordId(value) || extractDiscordId(key);
+        if (/مسؤول الاجازات/.test(key)) values.leaves = value;
+        else if (/مراقبة اللوقات/.test(key)) values.logs = value;
+        else if (/دفتر الحضور/.test(key)) values.attendance = value;
+        else if (/مسؤول الجرد/.test(key)) values.inventory = value;
+        else if (/مشرف المسؤوليات/.test(key)) values.supervisor = value;
+        else if (/تقييم المسؤوليات|تقيم المسؤوليات|التقييم النهائي|التقيم النهائي/.test(key)) values.final = value;
+      });
+      if (userId) map[userId] = values;
+    });
+    return map;
+  }
+
+  function buildBanSectionResult(input, authorName, cfg, memberRanks = {}) {
+    const separator = '**==============**';
+    const finalSeparator = '`-----------------------------------------------------`';
+    let output = `${separator}\n`;
+    let finalInventory = `${finalSeparator}\n`;
+    let reasonsOutput = '';
+    const points = { 1: [], 2: [], 3: [] };
+    const demote = [];
+    const dismiss = [];
+    const responsibilityMap = getBanResponsibilityMap(moduleContent.querySelector('.module-responsibilities')?.value || '');
+    let total = 0;
+    let bad = 0;
+    let out = 0;
+    let active = 0;
+
+    String(input || '').replace(/[\u200B-\u200D\uFEFF\u200F]/g, '').split(/\*\*==============\*\*|(?=منشن\s*الشخص\s*:)/).forEach((block) => {
+      if (!block.trim()) return;
+      const data = { mention: '', id: '', rank: '', tickets: 0, temporary: 0, permanent: 0, unban: 0, hours: 0, attendance: '', points: '', rawEval: '', responsibilityEval: '', finalEval: '' };
+      block.split(/\r?\n/).forEach((line) => {
+        const index = line.indexOf(':');
+        if (index < 0) return;
+        const key = line.slice(0, index).trim();
+        const value = line.slice(index + 1).trim();
+        if (/منشن\s*الشخص/.test(key)) data.mention = value;
+        else if (/^الايدي/.test(key)) data.id = value;
+        else if (/الرتبة\s*ادارية|الرتبة\s*الادارية/.test(key)) data.rank = value;
+        else if (/تكتات الباند|قبول التكتات/.test(key)) data.tickets = parseScenarioNumber(value);
+        else if (/باند مؤقت/.test(key)) data.temporary = parseScenarioNumber(value);
+        else if (/الباند النهائي/.test(key)) data.permanent = parseScenarioNumber(value);
+        else if (/فك باند/.test(key)) data.unban = parseScenarioNumber(value);
+        else if (/^النقاط/.test(key)) data.points = value;
+        else if (/دفتر الحضور|عدد الساعات|الساعات/.test(key)) data.hours = parseScenarioHours(value) / 60;
+        else if (/حضور الجرد|أكمل الجرد/.test(key)) data.attendance = value;
+        else if (/التقييم المسؤوليات|تقييم المسؤوليات/.test(key)) data.responsibilityEval = value;
+        else if (/التقييم النهائي|التقيم النهائي/.test(key)) data.finalEval = value;
+        else if (/^التقييم|^التقيم/.test(key)) data.rawEval = value;
+      });
+
+      const identity = extractDiscordId(data.mention) || extractDiscordId(data.id);
+      if (!identity) return;
+      const mention = preserveScenarioMention(data.mention, identity);
+      const rankInfo = banRankInfo(memberRanks[identity] || '');
+      const responsibilities = responsibilityMap[identity] || {};
+      const responsibilityValues = [data.responsibilityEval, responsibilities.leaves, responsibilities.logs, responsibilities.attendance, responsibilities.inventory, responsibilities.supervisor]
+        .filter((value) => !/لايوجد|لا يوجد/i.test(String(value || '')))
+        .map(scenarioResponsibilityGrade).filter(Boolean);
+      const highestResponsibility = responsibilityValues.slice().sort((left, right) => scenarioGradeRank(right) - scenarioGradeRank(left))[0] || 'لايوجد مسؤوليات';
+      const badResponsibilityCount = responsibilityValues.filter((value) => value === 'سيء').length;
+      const responsibilityGrade = badResponsibilityCount > 0 ? lowerScenarioGradeByCount(highestResponsibility, badResponsibilityCount) : highestResponsibility;
+      const actionPoints = data.temporary * 10 + data.permanent * 10 + data.tickets * 10 + data.unban * 3;
+      const attendancePoints = /^(نعم|اي|إي|yes)$/i.test(data.attendance) ? 50 : 0;
+      const hoursPoints = data.hours >= 20 ? 50 : data.hours >= 15 ? 35 : data.hours >= 10 ? 20 : data.hours >= 5 ? 10 : 0;
+      const responsibilityPoints = scenarioResponsibilityPoints(responsibilities.leaves, 50) + scenarioResponsibilityPoints(responsibilities.logs, 75) + scenarioResponsibilityPoints(responsibilities.attendance, 100) + scenarioResponsibilityPoints(responsibilities.inventory, 150) + scenarioResponsibilityPoints(responsibilities.supervisor, 200);
+      const calculatedPoints = actionPoints + attendancePoints + hoursPoints + responsibilityPoints;
+      const enteredPoints = parseScenarioNumber(data.points);
+      const totalPoints = data.points.trim() && Number.isFinite(enteredPoints) ? enteredPoints : calculatedPoints;
+      const providedEvaluation = [data.finalEval, data.rawEval].find((value) => value && !/لايوجد|لا يوجد/i.test(value));
+      const evaluation = providedEvaluation || banGradeFromPoints(totalPoints);
+      const sourceText = [data.finalEval, data.rawEval, data.responsibilityEval, data.rank].join(' ');
+      const isOut = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(sourceText) || sourceText.includes(cfg.outRoleId) || sourceText.includes(cfg.outRoleMention);
+      const finalEvaluation = isOut ? cfg.outRoleMention : calculateScenarioFinalGrade(evaluation, responsibilityGrade, badResponsibilityCount);
+      total++;
+      if (isOut) out++;
+      else if (/سيء|سئ|عدم تفاعل/.test(evaluation)) bad++; else active++;
+      const pointValue = /ممتاز\s*جدا/.test(finalEvaluation) ? 2 : /ممتاز|جيد\s*جدا/.test(finalEvaluation) ? 1 : 0;
+      if (rankInfo.points && pointValue && !isOut) points[pointValue].push(mention);
+      if (!isOut && /سيء|سئ|عدم تفاعل/.test(finalEvaluation) && rankInfo.punish === 'demote') demote.push(mention);
+      if (!isOut && /سيء|سئ|عدم تفاعل/.test(finalEvaluation) && rankInfo.punish === 'dismiss') dismiss.push(mention);
+      reasonsOutput += `${mention}\nتكتات الباند: ${data.tickets} × 10 = ${data.tickets * 10}\nالباند المؤقت: ${data.temporary} × 10 = ${data.temporary * 10}\nالباند النهائي: ${data.permanent} × 10 = ${data.permanent * 10}\nفك الباند: ${data.unban} × 3 = ${data.unban * 3}\nنقاط دفتر الحضور: ${hoursPoints}\nنقاط حضور الجرد: ${attendancePoints}\nنقاط المسؤوليات: ${responsibilityPoints}\nالتقييم: ${evaluation}\nتقييم المسؤوليات: ${responsibilityGrade}\nالتقييم النهائي: ${finalEvaluation}\nإجمالي البوينتات: ${totalPoints}\n\n`;
+      output += `منشن الشخص : ${mention}\nالايدي : ${data.id}\nالرتبة الادارية : ${data.rank}\nتكتات الباند : ${data.tickets}\nباند مؤقت : ${data.temporary}\nالباند النهائي : ${data.permanent}\nفك باند : ${data.unban}\nالنقاط : ${totalPoints}\nالتقييم : ${evaluation}\nالتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      finalInventory += `${mention}\nالتقييم : ${finalEvaluation}\nالرتبة الادارية : ${data.rank}\n${finalSeparator}\n`;
+    });
+    return { output, report: buildWeeklyReport(total, 0, out, bad, active, authorName), total, duplicates: [], pointsOutput: buildBanPointsText(points), demoteOutput: buildBanPenaltyText(demote, 'كسر'), dismissOutput: buildBanPenaltyText(dismiss, 'اعفاء'), reasonsOutput, finalInventory };
+  }
+
+  function buildBanPointsText(points) {
+    return `**السلام عليكم ورحمة الله وبركاتة •\nوالصلاة والسلام على اشرف الانبياء والمرسلين سيدنا ونبينا محمد\nأسعد الله اوقاتكم بكل خير جميعًا\nتحيه طيبه وبعد • **\n\n` +
+      `**يتم أعطاء المدعو : **\n<@&1135000856157233245>\n${points[1].join('\n') || 'لا يوجد'}\n\n` +
+      `<@&1135000856157233248>\n${points[2].join('\n') || 'لا يوجد'}\n\n` +
+      "` السبب : جرد أسبوعي `\n\n**توقيع**\n<@&1135000856417292359>\n<@&1135000856379531335>\n\n|| <@&1135000856199188518> ||";
+  }
+
+  function buildBanPenaltyText(users, action) {
+    return `**═════════ ﷽ ═══════════**\n\n**باسمي <@&1135000856417292359> **\n\n` +
+      `**\`يتم محاسبة المدعو :\`**\n\n${users.join('\n') || 'لا يوجد'}\n\n` +
+      `**بـ : ${action}**\n\n\`السبب : تقييم سيء\`\n\n--------------------\n\n` +
+      `**اسأل الله التوفيق لي ولكم التوفيق والسداد **\n\n**توقيع**\n- <@&1135000856417292359>\n- <@&1135000856379531335>\n\n|| <@&1135000856199188518> ||`;
+  }
+
   function parseEventBlocks(input, moduleKey = 'events') {
     if (!input || !input.trim()) return [];
 
@@ -948,6 +1141,10 @@ document.addEventListener('DOMContentLoaded', function () {
           id: '',
           userMention: '',
           events: 0,
+          accepted: 0,
+          rejected: 0,
+          fieldHire: 0,
+          hasInterviewCounts: false,
           respEval: '',
           rank: '',
           rawEval: '',
@@ -971,6 +1168,15 @@ document.addEventListener('DOMContentLoaded', function () {
             }
           } else if (key.includes('عدد الفعاليات')) {
             data.events = parseInt(val) || 0;
+          } else if (moduleKey === 'interviews' && /القبول|الاستقبال/.test(key)) {
+            data.accepted = parseScenarioNumber(val);
+            data.hasInterviewCounts = true;
+          } else if (moduleKey === 'interviews' && /مرفوض|رفض/.test(key)) {
+            data.rejected = parseScenarioNumber(val);
+            data.hasInterviewCounts = true;
+          } else if (moduleKey === 'interviews' && /توظيف\s*ميداني|ميداني/.test(key)) {
+            data.fieldHire = parseScenarioNumber(val);
+            data.hasInterviewCounts = true;
           } else if (key.includes('التقييم بالمسؤوليات') || key.includes('التقيم بالمسؤوليات')) {
             data.respEval = val;
           } else if (key.includes('الرتبة الادارية') || key.includes('الرتبة')) {
@@ -991,6 +1197,18 @@ document.addEventListener('DOMContentLoaded', function () {
         return data;
       })
       .filter(Boolean);
+  }
+
+  function getInterviewSurveyEvaluation(entry) {
+    if (!entry) return '';
+    if (!entry.hasInterviewCounts) {
+      return `${entry.finalEval || ''} ${entry.rawEval || ''}`.trim();
+    }
+
+    const hasResponsibilities = !!(entry.respEval && !/لايوجد|لا يوجد/i.test(String(entry.respEval)) && !hasSupervisorManualInterviewEvaluation(entry.respEval));
+    const responsibilityPoints = hasResponsibilities ? interviewsResponsibilityPoints(entry.respEval) : 0;
+    const totalPoints = (Number(entry.accepted) || 0) + (Number(entry.fieldHire) || 0) + (Number(entry.rejected) || 0) + responsibilityPoints;
+    return interviewsFinalGradeFromTotal(totalPoints);
   }
 
   function buildEventPointsSurvey(records, authorName, moduleKey = 'events') {
@@ -1190,8 +1408,10 @@ document.addEventListener('DOMContentLoaded', function () {
     records.forEach((entry) => {
       const recordId = entry.discordIdentifier || entry.userMention || entry.username || entry.name || entry.id || entry.userId || '';
       if (!recordId) return;
+      const rankInfo = interviewRankInfo(entry.rank);
+      if (!rankInfo.points) return;
 
-      const primaryEval = (entry.finalEval && entry.finalEval.trim()) || (entry.rawEval && entry.rawEval.trim()) || '';
+      const primaryEval = getInterviewSurveyEvaluation(entry);
       const hasExcellent = /ممتاز\s*جدا/.test(primaryEval);
       const hasGood = /جيد\s*جدا|ممتاز/.test(primaryEval);
 
@@ -1214,9 +1434,9 @@ document.addEventListener('DOMContentLoaded', function () {
   function buildInterviewsDemoteSurvey(records) {
     const names = records
       .filter((entry) => {
-        const primaryEval = (entry.finalEval && entry.finalEval.trim()) || (entry.rawEval && entry.rawEval.trim()) || '';
+        const primaryEval = getInterviewSurveyEvaluation(entry);
         const text = `${primaryEval} ${entry.rank || ''} ${entry.respEval || ''}`;
-        return /سيء|سئ|عدم تفاعل/.test(text) && !/1135000856379531343|1135000856304042012|1135000855872020515/.test(`${entry.discordIdentifier || entry.userMention || entry.userId || entry.username || entry.name || entry.id || ''} ${entry.rank}`);
+        return /سيء|سئ|عدم تفاعل/.test(text) && interviewRankInfo(entry.rank).punish === 'demote';
       })
       .map((entry) => getScenarioDisplayName(entry) || formatUserMention(entry.discordIdentifier || entry.userMention || entry.username || entry.name || entry.id || entry.userId || ''));
 
@@ -1236,9 +1456,9 @@ document.addEventListener('DOMContentLoaded', function () {
   function buildInterviewsDismissSurvey(records) {
     const names = records
       .filter((entry) => {
-        const primaryEval = (entry.finalEval && entry.finalEval.trim()) || (entry.rawEval && entry.rawEval.trim()) || '';
+        const primaryEval = getInterviewSurveyEvaluation(entry);
         const text = `${primaryEval} ${entry.rank || ''} ${entry.respEval || ''}`;
-        return /سيء|سئ|عدم تفاعل/.test(text) && !/1135000856379531343|1135000856304042012|1135000855872020515/.test(`${entry.discordIdentifier || entry.userMention || entry.userId || entry.username || entry.name || entry.id || ''} ${entry.rank}`);
+        return /سيء|سئ|عدم تفاعل/.test(text) && interviewRankInfo(entry.rank).punish === 'dismiss';
       })
       .map((entry) => getScenarioDisplayName(entry) || formatUserMention(entry.discordIdentifier || entry.userMention || entry.username || entry.name || entry.id || entry.userId || ''));
 
@@ -1473,6 +1693,135 @@ document.addEventListener('DOMContentLoaded', function () {
       `**عدد المتفاعلين بالقسم : ${countActive}  تقييم جيد جدا + ممتاز + ممتاز جدا   **\n\n` +
       `**هل يوجد ملاحظة بالقسم او حاب تطور شي من جميع نواحي :  لايوجد يعطيكم العافيية    **\n\n` +
       `**تم انشاء التقرير من قبل :{ ${authorName} }**`;
+  }
+
+  function hasSupervisorManualInterviewEvaluation(value) {
+    return /(?:تقييم|تقيم)\s*من\s*عند\s*المسؤول/i.test(String(value || ''));
+  }
+
+  function interviewsGradeFromCount(count) {
+    const value = Number.parseFloat(String(count || '').replace(/[^\d.]/g, '')) || 0;
+    if (value >= 20) return 'ممتاز جدا';
+    if (value >= 15) return 'ممتاز';
+    if (value >= 8) return 'جيد جدا';
+    return 'سيء';
+  }
+
+  function interviewsResponsibilityGrade(value) {
+    const text = String(value || '').trim();
+    if (hasSupervisorManualInterviewEvaluation(text)) return text;
+    if (/ممتاز\s*جدا/.test(text)) return 'ممتاز جدا';
+    if (/ممتاز/.test(text)) return 'ممتاز';
+    if (/جيد\s*جدا/.test(text)) return 'جيد جدا';
+    if (/سيء|سئ|ضعيف|عدم تفاعل/.test(text)) return 'سيء';
+    return 'لايوجد مسؤوليات';
+  }
+
+  function interviewsResponsibilityPoints(value) {
+    const grade = interviewsResponsibilityGrade(value);
+    if (grade === 'ممتاز جدا') return 4;
+    if (grade === 'ممتاز') return 2;
+    if (grade === 'جيد جدا') return 1;
+    return 0;
+  }
+
+  function interviewsInteractionPoints(grade, hasResponsibilities = true) {
+    if (grade === 'ممتاز جدا') return hasResponsibilities ? 6 : 10;
+    if (grade === 'ممتاز') return hasResponsibilities ? 4 : 8;
+    if (grade === 'جيد جدا') return hasResponsibilities ? 3 : 6;
+    return 0;
+  }
+
+  function interviewsFinalGradeFromTotal(total) {
+    if (total >= 20) return 'ممتاز جدا';
+    if (total >= 15) return 'ممتاز';
+    if (total >= 8) return 'جيد جدا';
+    if (total >= 5) return 'سيء';
+    return 'سيء';
+  }
+
+  function buildInterviewsSectionResult(input, authorName, cfg, memberRanks = {}) {
+    const separator = '**==============**';
+    const finalSeparator = '`-----------------------------------------------------`';
+    let output = `${separator}\n`;
+    let finalInventory = `${finalSeparator}\n`;
+    let reasonsOutput = '';
+    let total = 0;
+    let out = 0;
+    let bad = 0;
+    let active = 0;
+    const points = { 1: [], 2: [], 3: [] };
+    const demote = [];
+    const dismiss = [];
+
+    String(input || '').replace(/[\u200B-\u200D\uFEFF\u200F]/g, '').split(/\*\*==============\*\*|(?=منشن\s*الشخص\s*:)/).forEach((block) => {
+      if (!block.trim()) return;
+      const data = { mention: '', id: '', accepted: 0, rejected: 0, fieldHire: 0, rawEval: '', responsibilityEval: '', finalEval: '' };
+      block.split(/\r?\n/).forEach((line) => {
+        const index = line.indexOf(':');
+        if (index < 0) return;
+        const key = line.slice(0, index).trim();
+        const value = line.slice(index + 1).trim();
+
+        if (/منشن\s*الشخص/.test(key)) data.mention = value;
+        else if (/^الايدي/.test(key)) data.id = value;
+        else if (/القبول|الاستقبال/.test(key)) data.accepted = parseScenarioNumber(value);
+        else if (/مرفوض|رفض/.test(key)) data.rejected = parseScenarioNumber(value);
+        else if (/توظيف\s*ميداني|توظيف\s*ميداني|ميداني/.test(key)) data.fieldHire = parseScenarioNumber(value);
+        else if (/تقييم\s*المسؤوليات|تقيم\s*المسؤوليات/.test(key)) data.responsibilityEval = value;
+        else if (/التقييم النهائي|التقيم النهائي/.test(key)) data.finalEval = value;
+        else if (/^التقييم|^التقيم/.test(key)) data.rawEval = value;
+      });
+
+      const identity = extractDiscordId(data.mention) || extractDiscordId(data.id);
+      if (!identity) return;
+      const mention = preserveScenarioMention(data.mention, identity);
+      const rankInfo = interviewRankInfo(memberRanks[identity] || '');
+      const hasManualSupervisorText = [data.finalEval, data.rawEval, data.responsibilityEval].some((value) => hasSupervisorManualInterviewEvaluation(value));
+      const responsibilityGrade = data.responsibilityEval && !hasSupervisorManualInterviewEvaluation(data.responsibilityEval) ? interviewsResponsibilityGrade(data.responsibilityEval) : 'لايوجد مسؤوليات';
+      const hasResponsibilities = !!(data.responsibilityEval && !/لايوجد|لا يوجد/i.test(String(data.responsibilityEval || '')) && !hasSupervisorManualInterviewEvaluation(data.responsibilityEval));
+      const acceptedCount = Number.isFinite(data.accepted) ? data.accepted : 0;
+      const rejectedCount = Number.isFinite(data.rejected) ? data.rejected : 0;
+      const fieldHireCount = Number.isFinite(data.fieldHire) ? data.fieldHire : 0;
+      const interactionPoints = acceptedCount + fieldHireCount + rejectedCount;
+      const responsibilityPoints = hasResponsibilities ? interviewsResponsibilityPoints(data.responsibilityEval) : 0;
+      const totalPoints = responsibilityPoints + interactionPoints;
+      const evaluation = interviewsFinalGradeFromTotal(totalPoints);
+      const sourceText = `${data.finalEval} ${data.rawEval} ${data.responsibilityEval} ${data.id}`;
+      const isOut = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(sourceText) || sourceText.includes(cfg.outRoleId) || sourceText.includes(cfg.outRoleMention);
+      const finalEvaluation = isOut ? cfg.outRoleMention : evaluation;
+      const baseGrade = evaluation;
+
+      total++;
+      if (isOut) out++;
+      else if (/سيء|سئ|عدم تفاعل/.test(finalEvaluation)) bad++; else active++;
+
+      const pointValue = /ممتاز\s*جدا/.test(finalEvaluation) ? 3 : /ممتاز/.test(finalEvaluation) ? 2 : /جيد\s*جدا/.test(finalEvaluation) ? 1 : 0;
+      if (rankInfo.points && pointValue && !isOut) points[pointValue].push(mention);
+      if (!isOut && /سيء|سئ|عدم تفاعل/.test(finalEvaluation) && rankInfo.punish === 'demote') demote.push(mention);
+      if (!isOut && /سيء|سئ|عدم تفاعل/.test(finalEvaluation) && rankInfo.punish === 'dismiss') dismiss.push(mention);
+
+      const reasonText = hasResponsibilities
+        ? `التقييم ${baseGrade} لأن القبول ${acceptedCount} + التوظيف الميداني ${fieldHireCount} + الرفض ${rejectedCount}، مع مسؤوليات ${responsibilityGrade}، والمجموع ${totalPoints} = ${finalEvaluation}.`
+        : `التقييم ${baseGrade} لأن القبول ${acceptedCount} + التوظيف الميداني ${fieldHireCount} + الرفض ${rejectedCount}، بدون مسؤوليات (لايوجد مسؤوليات)، والمجموع ${totalPoints} = ${finalEvaluation}.`;
+
+      reasonsOutput += `${mention}\n${reasonText}\nالقبول: ${acceptedCount}\nمرفوض: ${rejectedCount}\nتوظيف ميداني: ${fieldHireCount}\nتقييم المسؤوليات: ${responsibilityGrade}\nالمجموع: ${totalPoints}\nالتقييم النهائي: ${finalEvaluation}\n` +
+        `\n--------------------\n\n`;
+      output += `منشن الشخص : ${mention}\nالايدي : ${data.id}\nالقبول : ${data.accepted}\nمرفوض : ${data.rejected}\nتوظيف ميداني : ${data.fieldHire}\nالتقييم : ${baseGrade}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      finalInventory += `${mention}\nالتقييم : ${finalEvaluation}\nالرتبة الادارية : ${data.rank || rankInfo.role}\n${finalSeparator}\n`;
+    });
+
+    return {
+      output,
+      report: buildWeeklyReport(total, 0, out, bad, active, authorName),
+      total,
+      duplicates: [],
+      pointsOutput: buildInterviewsPointsSurvey(parseEventBlocks(input, 'interviews')),
+      demoteOutput: buildInterviewsDemoteSurvey(parseEventBlocks(input, 'interviews')),
+      dismissOutput: buildInterviewsDismissSurvey(parseEventBlocks(input, 'interviews')),
+      reasonsOutput,
+      finalInventory
+    };
   }
 
   function buildEventSectionResult(input, authorName, cfg, memberRanks = {}, responsibilityEvaluations = {}) {
@@ -1748,67 +2097,12 @@ document.addEventListener('DOMContentLoaded', function () {
       return buildRaqabhSectionResult(input, authorName, cfg, getRaqabhMemberRanks());
     }
 
+    if (moduleKey === 'ban') {
+      return buildBanSectionResult(input, authorName, cfg, getBanMemberRanks());
+    }
+
     if (moduleKey === 'interviews') {
-      const lineSeparator = '**==============**';
-      let result = `${lineSeparator}\n`;
-      let processedCount = 0;
-      let idTracker = {};
-      let countNew = 0;
-      let countOut = 0;
-      let countBad = 0;
-      let countActive = 0;
-
-      const entries = input.split(cfg.splitRegex);
-      entries.forEach((entry) => {
-        if (!entry || !entry.trim()) return;
-        if (!entry.includes('الايدي')) return;
-
-        let data = { userMention: '', userId: '', rank: '', finalEval: '', rawEval: '' };
-        const lines = entry.split(/\r?\n/);
-        lines.forEach((line) => {
-          if (!line.includes(':')) return;
-          const parts = line.split(':');
-          const key = parts[0].trim();
-          const val = parts.slice(1).join(':').trim();
-          if (key === 'منشن الشخص') data.userMention = val;
-          else if (key === 'الايدي') data.userId = val;
-          else if (key === 'الرتبة ادارية' || key === 'الرتبة الادارية' || key === 'الرتبة  الادارية' || key.includes('الرتبة')) data.rank = val;
-          else if (key === 'التقيم النهائي' || key === 'التقييم النهائي') data.finalEval = val;
-          else if (key === 'التقييم' || key === 'التقيم') data.rawEval = val;
-        });
-
-        const source = data.userMention || data.userId || '';
-        if (!source) return;
-
-        processedCount++;
-        const rawKey = String(source).replace(/[^0-9]/g, '');
-        if (rawKey && rawKey.length >= 17) {
-          idTracker[rawKey] = (idTracker[rawKey] || 0) + 1;
-        }
-
-        const cleanRank = cleanAndStandardizeRank(data.rank);
-        const primaryEval = (data.finalEval && data.finalEval.trim()) || (data.rawEval && data.rawEval.trim()) || 'سيء';
-        const hasExcellent = /ممتاز\s*جدا/.test(primaryEval);
-        const hasGood = /جيد\s*جدا|ممتاز/.test(primaryEval);
-        const isBad = /سيء|سئ|عدم تفاعل/.test(primaryEval);
-        const isOutOfService = /خارج\s*الخدمة|خارج\s*خدمة|إجازة/i.test(primaryEval) || primaryEval.includes(cfg.outRoleId) || primaryEval.includes(cfg.outRoleMention.replace(/\s+/g, ''));
-
-        if (isOutOfService) countOut++;
-        else if (hasExcellent || hasGood) countActive++;
-        else if (isBad) countBad++;
-
-        const displayEval = isOutOfService ? cfg.outRoleMention : primaryEval;
-        const formattedMention = formatUserMention(source);
-        result += `${formattedMention || 'غير متاح'}\nالتقييم : ${displayEval}\nالرتبة الادارية : ${cleanRank}\n${lineSeparator}\n`;
-      });
-
-      const weeklyReport = buildWeeklyReport(processedCount, countNew, countOut, countBad, countActive, authorName);
-      return {
-        output: result,
-        report: weeklyReport,
-        total: processedCount,
-        duplicates: Object.keys(idTracker).filter((key) => idTracker[key] > 1).map((key) => ({ id: key, count: idTracker[key] }))
-      };
+      return buildInterviewsSectionResult(input, authorName, cfg, getInterviewsMemberRanks());
     }
 
     if (moduleKey === 'raqabh') {
@@ -2058,7 +2352,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
         return;
       }
       output.value = result.output;
-      if (reasonsOutput) reasonsOutput.value = moduleKey === 'scenario' || moduleKey === 'raqabh'
+      if (reasonsOutput) reasonsOutput.value = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban' || moduleKey === 'interviews'
         ? (result.reasonsOutput || '')
         : buildDepartmentReasons(result.output, moduleKey);
       if (finalOutput) finalOutput.value = result.finalInventory || buildFinalInventoryOutput(result.output);
@@ -2066,7 +2360,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
       totalCount.textContent = `إجمالي العدد: ${result.total}`;
 
       if (moduleKey === 'events' || moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'interviews' || moduleKey === 'ban' || moduleKey === 'roles') {
-        if ((moduleKey === 'events' || moduleKey === 'scenario' || moduleKey === 'raqabh') && result.pointsOutput) {
+        if ((moduleKey === 'events' || moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban') && result.pointsOutput) {
           moduleContent.querySelector('.points-output').value = result.pointsOutput;
           moduleContent.querySelector('.demote-output').value = result.demoteOutput;
           moduleContent.querySelector('.dismiss-output').value = result.dismissOutput;
@@ -2076,7 +2370,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
         const demoteOutput = moduleContent.querySelector('.demote-output');
         const dismissOutput = moduleContent.querySelector('.dismiss-output');
 
-        if (pointsOutput && moduleKey !== 'events' && moduleKey !== 'scenario' && moduleKey !== 'raqabh') {
+        if (pointsOutput && moduleKey !== 'events' && moduleKey !== 'scenario' && moduleKey !== 'raqabh' && moduleKey !== 'ban') {
           if (moduleKey === 'scenario') {
             pointsOutput.value = buildScenarioPointsSurvey(records);
           } else if (moduleKey === 'raqabh') {
@@ -2091,7 +2385,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
             pointsOutput.value = buildEventPointsSurvey(records, authorInput.value.trim());
           }
         }
-        if (demoteOutput && moduleKey !== 'events' && moduleKey !== 'scenario' && moduleKey !== 'raqabh') {
+        if (demoteOutput && moduleKey !== 'events' && moduleKey !== 'scenario' && moduleKey !== 'raqabh' && moduleKey !== 'ban') {
           if (moduleKey === 'scenario') {
             demoteOutput.value = buildScenarioDemoteSurvey(records);
           } else if (moduleKey === 'raqabh') {
@@ -2106,7 +2400,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
             demoteOutput.value = buildEventDemoteSurvey(records);
           }
         }
-        if (dismissOutput && moduleKey !== 'events' && moduleKey !== 'scenario' && moduleKey !== 'raqabh') {
+        if (dismissOutput && moduleKey !== 'events' && moduleKey !== 'scenario' && moduleKey !== 'raqabh' && moduleKey !== 'ban') {
           if (moduleKey === 'scenario') {
             dismissOutput.value = buildScenarioDismissSurvey(records);
           } else if (moduleKey === 'raqabh') {
