@@ -2257,6 +2257,74 @@ document.addEventListener('DOMContentLoaded', function () {
       .join('\n\n') || 'لا يوجد متصدرين';
   }
 
+  function buildDepartmentLeadersOutput(input, moduleKey) {
+    if (moduleKey === 'events') return buildEventLeadersOutput(input);
+
+    const leaders = [];
+    const addLeader = (identity, mention, value, label) => {
+      if (identity && mention) leaders.push({ identity, mention, value, label });
+    };
+
+    if (moduleKey === 'scenario') {
+      parseScenarioRecords(input).forEach((record) => {
+        const monitored = parseScenarioNumber(record.common) +
+          parseScenarioTriple(record.jewelry).reduce((sum, value) => sum + value, 0) +
+          parseScenarioTriple(record.central).reduce((sum, value) => sum + value, 0) +
+          parseScenarioTriple(record.home).reduce((sum, value) => sum + value, 0);
+        addLeader(record.identity, preserveScenarioMention(record.mention, record.identity), monitored, 'عدد السيناريوهات');
+      });
+    } else if (moduleKey === 'interviews') {
+      parseEventBlocks(input, 'interviews').forEach((record) => {
+        const identity = extractDiscordId(record.id || record.userMention);
+        const mention = preserveScenarioMention(record.userMention || record.id, identity);
+        const totalInterviews = (Number(record.accepted) || 0) + (Number(record.rejected) || 0) + (Number(record.fieldHire) || 0);
+        addLeader(identity, mention, totalInterviews, 'مجموع المقابلات');
+      });
+    } else if (moduleKey === 'roles') {
+      parseEventBlocks(input, 'roles').forEach((record) => {
+        const identity = extractDiscordId(record.id || record.userMention);
+        const mention = preserveScenarioMention(record.userMention || record.id, identity);
+        const totalTickets = (Number(record.nameChanges) || 0) + (Number(record.roleGrants) || 0);
+        addLeader(identity, mention, totalTickets, 'إجمالي التكتات');
+      });
+    } else {
+      const blocks = String(input || '').split(/={3,}|(?=منشن\s*الشخص\s*:)/).filter((block) => block.trim());
+      blocks.forEach((block) => {
+        let id = '';
+        let mention = '';
+        let value = 0;
+        let detailedMinutes = 0;
+        let explicitTotalMinutes = 0;
+        block.split(/\r?\n/).forEach((line) => {
+          const separator = line.indexOf(':');
+          if (separator < 0) return;
+          const key = line.slice(0, separator).trim();
+          const rawValue = line.slice(separator + 1).trim();
+          if (/منشن\s*الشخص/.test(key)) mention = rawValue;
+          else if (/^الايدي/.test(key)) id = rawValue;
+          else if (moduleKey === 'raqabh' && /مجموع الساعات/.test(key)) explicitTotalMinutes = parseScenarioHours(rawValue);
+          else if (moduleKey === 'raqabh' && /ساعات الملكية|مراقب الملكية|مراقب خصوصي|مراقب عام/.test(key)) detailedMinutes += parseScenarioHours(rawValue);
+          else if (moduleKey === 'ban' && /تكتات الباند|قبول التكتات/.test(key)) value = parseScenarioNumber(rawValue);
+        });
+        if (moduleKey === 'raqabh') value = (explicitTotalMinutes || detailedMinutes) / 60;
+        const identity = extractDiscordId(mention) || extractDiscordId(id);
+        addLeader(identity, preserveScenarioMention(mention || id, identity), value, moduleKey === 'raqabh' ? 'مجموع الساعات' : 'تكتات الباند');
+      });
+    }
+
+    const uniqueLeaders = new Map();
+    leaders.forEach((leader) => {
+      const current = uniqueLeaders.get(leader.identity);
+      if (!current || leader.value > current.value) uniqueLeaders.set(leader.identity, leader);
+    });
+
+    return [...uniqueLeaders.values()]
+      .sort((left, right) => right.value - left.value)
+      .slice(0, 5)
+      .map((leader, index) => `${index + 1}. ${leader.mention}\n${leader.label}: ${leader.value}`)
+      .join('\n\n') || 'لا يوجد متصدرين';
+  }
+
   function buildScenarioSectionResult(input, authorName, cfg, memberRanks = {}, responsibilityEvaluations = {}) {
     const lineSeparator = '**==============**';
     const finalInventorySeparator = '`-----------------------------------------------------`';
@@ -2711,9 +2779,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
 
         const transferOutput = moduleContent.querySelector('.transfer-output');
         if (transferOutput) {
-          transferOutput.value = moduleKey === 'events'
-            ? buildEventLeadersOutput(deduplicateModuleInput(input.value, moduleKey))
-            : result.output;
+          transferOutput.value = buildDepartmentLeadersOutput(deduplicateModuleInput(input.value, moduleKey), moduleKey);
         }
       }
 
