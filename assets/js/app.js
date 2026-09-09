@@ -2082,6 +2082,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let result = `${lineSeparator}\n`;
     let finalInventory = `${finalInventorySeparator}\n`;
     let processedCount = 0;
+    let totalEvents = 0;
     let idTracker = {};
     let countNew = 0;
     let countOut = 0;
@@ -2127,6 +2128,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!data.id) return;
 
       processedCount++;
+      totalEvents += data.events;
 
       const rawKey = String(data.id).replace(/[^a-zA-Z0-9_.-]/g, '').toLowerCase().trim();
       if (rawKey) {
@@ -2140,8 +2142,8 @@ document.addEventListener('DOMContentLoaded', function () {
       } else if (!data.respEval) {
         data.respEval = 'لايوجد مسؤوليات';
       }
-      const departmentRankInfo = eventRankInfo((userId && memberRanks[userId]) || data.deptRank);
-      const administrativeRankInfo = eventRankInfo(data.rank);
+      const departmentRankInfo = eventRankInfo((userId && memberRanks[userId]) || '');
+      const administrativeRankInfo = data.rank.trim() ? eventRankInfo(data.rank) : { points: false };
       const hasResponsibilities = checkIfHasResponsibilities(data.respEval);
       const sectionRes = getSectionScore(data.events, hasResponsibilities);
       const respPoints = hasResponsibilities ? getRespScore(data.respEval) : 0;
@@ -2168,7 +2170,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       const calculatedSectionPoints = finalRating.includes('ممتاز جدا') ? 3 : finalRating.includes('ممتاز') ? 2 : finalRating.includes('جيد جدا') ? 1 : 0;
-      const sectionPoints = data.sectionPoints && data.sectionPoints !== '0' ? data.sectionPoints : String(calculatedSectionPoints);
+      const sectionPoints = departmentRankInfo.points ? String(calculatedSectionPoints) : '0';
       const calculatedMemberPoints = !administrativeRankInfo.points ? '0' : data.events >= 100 ? 'ترقيتين' : data.events >= 50 ? 'ترقية' : data.events >= 25 ? '2' : data.events >= 15 ? '1' : '0';
       const memberPoints = calculatedMemberPoints;
       if (finalRating === 'سيء' && departmentRankInfo.punish === 'demote') demoteUsers.push(formattedMentionForEvent(data.id));
@@ -2192,7 +2194,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const roleMentionForOutput = detectedRoleMention || cfg.outRoleMention;
       const formattedMention = formatEventUserMention(data.id);
       const evaluationOutput = shouldMentionOutOfServiceRole ? roleMentionForOutput : finalRating;
-      result += `الايدي : ${data.id.trim()}\nعدد الفعاليات : ${data.events}\nرتبة القسم : ${departmentRankInfo.role}\nبوينتات القسم : ${sectionPoints}\nالبوينتات : ${memberPoints}\nالتقييم : ${sectionRes.text}\nالتقييم بالمسؤوليات : ${data.respEval}\nالرتبة الادارية : ${cleanRank}\nالتقيم النهائي : ${evaluationOutput}\n${lineSeparator}\n`;
+      result += `الايدي : ${data.id.trim()}\nعدد الفعاليات : ${data.events}\nبوينتات القسم : ${sectionPoints}\nالبوينتات : ${memberPoints}\nالتقييم : ${sectionRes.text}\nالتقييم بالمسؤوليات : ${data.respEval}\nالرتبة الادارية : ${cleanRank}\nالتقيم النهائي : ${evaluationOutput}\n${lineSeparator}\n`;
       finalInventory += `${formattedMention}\nالتقييم : ${evaluationOutput}\nالرتبة الادارية : ${cleanRank}\n${finalInventorySeparator}\n`;
     });
 
@@ -2215,12 +2217,44 @@ document.addEventListener('DOMContentLoaded', function () {
       output: result,
       report,
       total: processedCount,
+      totalEvents,
       duplicates: duplicateEntries,
       pointsOutput,
       demoteOutput,
       dismissOutput,
       finalInventory
     };
+  }
+
+  function buildEventLeadersOutput(input) {
+    const leaders = [];
+    String(input || '').split(/={3,}/).forEach((block) => {
+      if (!block.trim()) return;
+      let id = '';
+      let events = 0;
+      block.split(/\r?\n/).forEach((line) => {
+        const separator = line.indexOf(':');
+        if (separator < 0) return;
+        const key = line.slice(0, separator).trim();
+        const value = line.slice(separator + 1).trim();
+        if (key.includes('الايدي')) id = value;
+        else if (key.includes('عدد الفعاليات')) events = parseInt(value, 10) || 0;
+      });
+      const identity = extractDiscordId(id);
+      if (identity) leaders.push({ identity, mention: formatEventUserMention(id), events });
+    });
+
+    const uniqueLeaders = new Map();
+    leaders.forEach((leader) => {
+      const current = uniqueLeaders.get(leader.identity);
+      if (!current || leader.events > current.events) uniqueLeaders.set(leader.identity, leader);
+    });
+
+    return [...uniqueLeaders.values()]
+      .sort((left, right) => right.events - left.events)
+      .slice(0, 5)
+      .map((leader, index) => `${index + 1}. ${leader.mention}\nعدد الفعاليات: ${leader.events}`)
+      .join('\n\n') || 'لا يوجد متصدرين';
   }
 
   function buildScenarioSectionResult(input, authorName, cfg, memberRanks = {}, responsibilityEvaluations = {}) {
@@ -2589,6 +2623,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
     const authorInput = inventoryPanel ? inventoryPanel.querySelector('.module-author') : moduleContent.querySelector('.module-author');
     const totalCount = inventoryPanel ? inventoryPanel.querySelector('.stats-count') : moduleContent.querySelector('.stats-count');
     const duplicateAlert = inventoryPanel ? inventoryPanel.querySelector('.stats-duplicates') : moduleContent.querySelector('.stats-duplicates');
+    const eventsTotal = inventoryPanel ? inventoryPanel.querySelector('.stats-events-total') : null;
     const membersField = moduleContent.querySelector('.module-members');
     const responsibilitiesField = moduleContent.querySelector('.module-responsibilities');
 
@@ -2615,6 +2650,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
       if (finalOutput) finalOutput.value = result.finalInventory || buildFinalInventoryOutput(result.output);
       report.value = result.report;
       totalCount.textContent = `إجمالي العدد: ${result.total}`;
+      if (eventsTotal) eventsTotal.textContent = `إجمالي عدد الفعاليات: ${result.totalEvents || 0}`;
 
       if (moduleKey === 'events' || moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'interviews' || moduleKey === 'ban' || moduleKey === 'roles') {
         if ((moduleKey === 'events' || moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban') && result.pointsOutput) {
@@ -2675,7 +2711,9 @@ const source = data.userMention || data.userId || data.username || data.discordI
 
         const transferOutput = moduleContent.querySelector('.transfer-output');
         if (transferOutput) {
-          transferOutput.value = result.output;
+          transferOutput.value = moduleKey === 'events'
+            ? buildEventLeadersOutput(deduplicateModuleInput(input.value, moduleKey))
+            : result.output;
         }
       }
 
@@ -2747,7 +2785,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
     copyTransferBtn?.addEventListener('click', () => {
       const transferOutput = moduleContent.querySelector('.transfer-output');
       copyText(transferOutput?.value || '');
-      showToast('تم نسخ نقل الجرد');
+      showToast(moduleKey === 'events' ? 'تم نسخ قائمة المتصدرين' : 'تم نسخ نقل الجرد');
     });
     clearBtn?.addEventListener('click', () => {
       input.value = '';
@@ -2757,6 +2795,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
       report.value = '';
       authorInput.value = '';
       totalCount.textContent = 'إجمالي العدد: 0';
+      if (eventsTotal) eventsTotal.textContent = 'إجمالي عدد الفعاليات: 0';
       duplicateAlert.style.display = 'none';
       duplicateAlert.textContent = '';
 
@@ -2901,7 +2940,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
           <button class="subtab-btn active" type="button" data-subtab="inventory">📊 تجهيز الجرد</button>
           <button class="subtab-btn" type="button" data-subtab="points">🎁 البوينتات</button>
           <button class="subtab-btn" type="button" data-subtab="accounting">⚠️ المحاسبة</button>
-          <button class="subtab-btn" type="button" data-subtab="transfer">🔄 نقل الجرد</button>
+          <button class="subtab-btn" type="button" data-subtab="transfer">🏆 المتصدرين</button>
         </nav>
 
         <div class="subtab-panel active" data-panel="inventory">
@@ -2921,6 +2960,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
               <textarea class="module-output" readonly placeholder="ستظهر النتيجة هنا..."></textarea>
               <div class="stats-bar">
                 <div class="stats-count">إجمالي العدد: 0</div>
+                ${safeKey === 'events' ? '<div class="stats-count stats-events-total">إجمالي عدد الفعاليات: 0</div>' : ''}
                 <div class="stats-duplicates" style="display: none;"></div>
               </div>
             </div>
@@ -2993,10 +3033,10 @@ const source = data.userMention || data.userId || data.username || data.discordI
 
         <div class="subtab-panel" data-panel="transfer">
           <div class="mini-form-card">
-            <h3>🔄 نقل الجرد</h3>
-            <textarea class="transfer-output" readonly placeholder="سيظهر نص نقل الجرد النهائي هنا..."></textarea>
+            <h3>🏆 المتصدرين</h3>
+            <textarea class="transfer-output" readonly placeholder="سيظهر أعلى خمسة أشخاص حسب عدد الفعاليات..."></textarea>
             <div class="mini-form-actions">
-              <button class="primary action-copy-transfer" type="button">نسخ نقل الجرد</button>
+              <button class="primary action-copy-transfer" type="button">نسخ المتصدرين</button>
             </div>
           </div>
         </div>
