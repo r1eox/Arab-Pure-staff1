@@ -508,6 +508,72 @@ document.addEventListener('DOMContentLoaded', function () {
     member: '<@&1135000855872020515>'
   };
 
+  const rolesOfficialDepartmentRoles = {
+    boss: '<@&1135000856379531342>',
+    deputyBoss: '<@&1135000856304042011>',
+    supervisorA: '<@&1289489551106244660>',
+    deputySupervisorA: '<@&1135000856064958507>',
+    assistantSupervisor: '<@&1135000856064958506>',
+    supervisor: '<@&1135000856064958505>',
+    deputySupervisor: '<@&1265743181245448254>',
+    member: '<@&1135000856043995234>'
+  };
+
+  function rolesOfficialRankInfo(rankText) {
+    const text = String(rankText || '');
+    if (/1135000856379531342|1135000856304042011|1289489551106244660|1135000856064958507/.test(text)) return { role: rolesOfficialDepartmentRoles.boss, points: false, punish: 'none' };
+    if (/1135000856064958506|مساعد/.test(text)) return { role: rolesOfficialDepartmentRoles.assistantSupervisor, points: false, punish: 'demote' };
+    if (/1135000856064958505|1265743181245448254|مشرف/.test(text)) return { role: rolesOfficialDepartmentRoles.supervisor, points: true, punish: 'demote' };
+    if (/1135000856043995234|عضو/.test(text)) return { role: rolesOfficialDepartmentRoles.member, points: true, punish: 'dismiss' };
+    return { role: rolesOfficialDepartmentRoles.member, points: true, punish: 'dismiss' };
+  }
+
+  function rolesOfficialEntryRankInfo(entry) {
+    return rolesOfficialRankInfo(entry && (entry.sectionRank || entry.rank));
+  }
+
+  function rolesOfficialGradeFromPoints(points) {
+    const value = Number(points) || 0;
+    if (value >= 135) return 'ممتاز جدا';
+    if (value >= 85) return 'ممتاز';
+    if (value >= 55) return 'جيد جدا';
+    return 'سيء';
+  }
+
+  function rolesOfficialResponsibilityPoints(value) {
+    const grade = interviewsResponsibilityGrade(value);
+    if (grade === 'ممتاز جدا') return 4;
+    if (grade === 'ممتاز') return 2;
+    if (grade === 'جيد جدا') return 1;
+    return 0;
+  }
+
+  function rolesOfficialInteractionPoints(grade, hasResponsibilities = true) {
+    if (grade === 'ممتاز جدا') return hasResponsibilities ? 6 : 10;
+    if (grade === 'ممتاز') return hasResponsibilities ? 4 : 8;
+    if (grade === 'جيد جدا') return hasResponsibilities ? 3 : 6;
+    return 0;
+  }
+
+  function rolesOfficialFinalGrade(total) {
+    if (total >= 9) return 'ممتاز جدا';
+    if (total >= 7) return 'ممتاز';
+    if (total >= 4) return 'جيد جدا';
+    return 'سيء';
+  }
+
+  function rolesOfficialEntryResult(entry) {
+    const totalTickets = (Number(entry.nameChanges) || 0) + (Number(entry.roleGrants) || 0);
+    const activityPoints = totalTickets * 3;
+    const baseGrade = rolesOfficialGradeFromPoints(totalTickets);
+    const hasResponsibilities = !!(entry.respEval && !/لايوجد|لا يوجد/i.test(String(entry.respEval)));
+    const responsibilityGrade = hasResponsibilities ? interviewsResponsibilityGrade(entry.respEval) : 'لايوجد مسؤوليات';
+    const responsibilityPoints = hasResponsibilities ? rolesOfficialResponsibilityPoints(entry.respEval) : 0;
+    const interactionPoints = rolesOfficialInteractionPoints(baseGrade, hasResponsibilities);
+    const totalPoints = responsibilityPoints + interactionPoints;
+    return { activityPoints, baseGrade, responsibilityGrade, responsibilityPoints, interactionPoints, totalPoints, finalGrade: rolesOfficialFinalGrade(totalPoints) };
+  }
+
   function banRankInfo(rankText) {
     const text = String(rankText || '');
     if (/1135000856417292359|1135000856379531335|1135000856215961658|1135000856215961657/.test(text)) return { role: banDepartmentRoles.boss, points: false, punish: 'none', kind: 'leader' };
@@ -620,6 +686,27 @@ document.addEventListener('DOMContentLoaded', function () {
         currentRole = roles[roles.length - 1];
         return;
       }
+      const userId = extractDiscordId(text);
+      if (userId) map[userId] = currentRole;
+    });
+    return map;
+  }
+
+  function getRolesOfficialMemberRanks() {
+    const field = moduleContent.querySelector('.module-members');
+    const map = {};
+    if (!field || !field.value.trim()) return map;
+    let currentRole = rolesOfficialDepartmentRoles.member;
+    field.value.split(/\r?\n/).forEach((line) => {
+      const text = line.trim();
+      if (!text) return;
+
+      const roles = text.match(/<@&\d{17,20}>/g);
+      if (roles && (text.includes('➜') || text.includes('<@&'))) {
+        currentRole = roles[roles.length - 1];
+        return;
+      }
+
       const userId = extractDiscordId(text);
       if (userId) map[userId] = currentRole;
     });
@@ -1132,8 +1219,12 @@ document.addEventListener('DOMContentLoaded', function () {
   function parseEventBlocks(input, moduleKey = 'events') {
     if (!input || !input.trim()) return [];
 
+    const blockSeparator = moduleKey === 'roles' || moduleKey === 'interviews'
+      ? /={3,}|(?=الايدي\s*:)/
+      : /={3,}/;
+
     return input
-      .split(/={3,}/)
+      .split(blockSeparator)
       .map((block) => {
         if (!block || !block.trim()) return null;
 
@@ -1145,6 +1236,11 @@ document.addEventListener('DOMContentLoaded', function () {
           rejected: 0,
           fieldHire: 0,
           hasInterviewCounts: false,
+          nameChanges: 0,
+          roleGrants: 0,
+          tickets: 0,
+          totalPoints: 0,
+          average: '',
           respEval: '',
           rank: '',
           rawEval: '',
@@ -1177,7 +1273,17 @@ document.addEventListener('DOMContentLoaded', function () {
           } else if (moduleKey === 'interviews' && /توظيف\s*ميداني|ميداني/.test(key)) {
             data.fieldHire = parseScenarioNumber(val);
             data.hasInterviewCounts = true;
-          } else if (key.includes('التقييم بالمسؤوليات') || key.includes('التقيم بالمسؤوليات')) {
+          } else if (moduleKey === 'roles' && /تغيير\s*الاسم/.test(key)) {
+            data.nameChanges = parseScenarioNumber(val);
+          } else if (moduleKey === 'roles' && /اعطاء\s*الرتب|إعطاء\s*الرتب/.test(key)) {
+            data.roleGrants = parseScenarioNumber(val);
+          } else if (moduleKey === 'roles' && /اجمالي\s*التكتات|إجمالي\s*التكتات/.test(key)) {
+            data.tickets = parseScenarioNumber(val);
+          } else if (moduleKey === 'roles' && /اجمالي\s*البوينتات|إجمالي\s*البوينتات/.test(key)) {
+            data.totalPoints = parseScenarioNumber(val);
+          } else if (moduleKey === 'roles' && /المعدل/.test(key)) {
+            data.average = val;
+          } else if (key.includes('التقييم بالمسؤوليات') || key.includes('التقيم بالمسؤوليات') || /تقييم?\s*المسؤوليات|تقيم\s*المسؤوليات|التقييم\s*المسؤوليات|التقيم\s*المسؤوليات/.test(key)) {
             data.respEval = val;
           } else if (key.includes('الرتبة الادارية') || key.includes('الرتبة')) {
             data.rank = val;
@@ -1554,8 +1660,9 @@ document.addEventListener('DOMContentLoaded', function () {
     records.forEach((entry) => {
       const recordId = entry.discordIdentifier || entry.userMention || entry.username || entry.name || entry.id || entry.userId || '';
       if (!recordId) return;
+      if (!rolesOfficialEntryRankInfo(entry).points) return;
 
-      const primaryEval = (entry.finalEval && entry.finalEval.trim()) || (entry.rawEval && entry.rawEval.trim()) || '';
+      const primaryEval = rolesOfficialEntryResult(entry).finalGrade;
       const hasExcellent = /ممتاز\s*جدا/.test(primaryEval);
       const hasGood = /جيد\s*جدا|ممتاز/.test(primaryEval);
 
@@ -1578,9 +1685,9 @@ document.addEventListener('DOMContentLoaded', function () {
   function buildRolesDemoteSurvey(records) {
     const names = records
       .filter((entry) => {
-        const primaryEval = (entry.finalEval && entry.finalEval.trim()) || (entry.rawEval && entry.rawEval.trim()) || '';
+        const primaryEval = rolesOfficialEntryResult(entry).finalGrade;
         const text = `${primaryEval} ${entry.rank || ''} ${entry.respEval || ''}`;
-        return /سيء|سئ|عدم تفاعل/.test(text) && !/1135000856379531342|1135000856304042011|1135000856043995234/.test(`${entry.discordIdentifier || entry.userMention || entry.userId || entry.username || entry.name || entry.id || ''} ${entry.rank}`);
+        return /سيء|سئ|عدم تفاعل/.test(text) && rolesOfficialEntryRankInfo(entry).punish === 'demote';
       })
       .map((entry) => getScenarioDisplayName(entry) || formatUserMention(entry.discordIdentifier || entry.userMention || entry.username || entry.name || entry.id || entry.userId || ''));
 
@@ -1600,9 +1707,9 @@ document.addEventListener('DOMContentLoaded', function () {
   function buildRolesDismissSurvey(records) {
     const names = records
       .filter((entry) => {
-        const primaryEval = (entry.finalEval && entry.finalEval.trim()) || (entry.rawEval && entry.rawEval.trim()) || '';
+        const primaryEval = rolesOfficialEntryResult(entry).finalGrade;
         const text = `${primaryEval} ${entry.rank || ''} ${entry.respEval || ''}`;
-        return /سيء|سئ|عدم تفاعل/.test(text) && !/1135000856379531342|1135000856304042011|1135000856043995234/.test(`${entry.discordIdentifier || entry.userMention || entry.userId || entry.username || entry.name || entry.id || ''} ${entry.rank}`);
+        return /سيء|سئ|عدم تفاعل/.test(text) && rolesOfficialEntryRankInfo(entry).punish === 'dismiss';
       })
       .map((entry) => getScenarioDisplayName(entry) || formatUserMention(entry.discordIdentifier || entry.userMention || entry.username || entry.name || entry.id || entry.userId || ''));
 
@@ -1617,6 +1724,100 @@ document.addEventListener('DOMContentLoaded', function () {
       '- <@&1135000856379531342>\n' +
       '- <@&1135000856304042011> \n\n' +
       '|| <@&1135000856043995234> ||';
+  }
+
+  function buildRolesOfficialSectionResult(input, authorName, cfg, memberRanks = {}) {
+    const separator = '**==============**';
+    const finalSeparator = '`-----------------------------------------------------`';
+    let output = `${separator}\n`;
+    let finalInventory = `${finalSeparator}\n`;
+    let reasonsOutput = '';
+    const records = parseEventBlocks(input, 'roles');
+    let bad = 0;
+    let active = 0;
+    let out = 0;
+    const pointRecords = [];
+    const demoteRecords = [];
+    const dismissRecords = [];
+
+    records.forEach((entry) => {
+      const identity = extractDiscordId(entry.id);
+      if (identity && memberRanks[identity]) entry.sectionRank = memberRanks[identity];
+    });
+
+    records.forEach((entry) => {
+      const mention = getScenarioDisplayName(entry) || formatUserMention(entry.id);
+      if (!mention) return;
+
+      const rankInfo = rolesOfficialEntryRankInfo(entry);
+      const nameChanges = Number(entry.nameChanges) || 0;
+      const roleGrants = Number(entry.roleGrants) || 0;
+      const result = rolesOfficialEntryResult(entry);
+      const { activityPoints, baseGrade, responsibilityGrade, totalPoints, finalGrade } = result;
+      const nameChangePoints = nameChanges * 3;
+      const roleGrantPoints = roleGrants * 5;
+      const totalTickets = nameChanges + roleGrants;
+      const activityGradeRule = totalTickets >= 135
+        ? 'لأن إجمالي التكتات 135 أو أكثر'
+        : totalTickets >= 85
+          ? 'لأن إجمالي التكتات من 85 إلى 134'
+          : totalTickets >= 55
+            ? 'لأن إجمالي التكتات من 55 إلى 84'
+            : 'لأن إجمالي التكتات أقل من 55';
+      const interactionRule = result.interactionPoints === 10
+        ? 'بدون مسؤوليات، لذلك التفاعل يحسب من 10 نقاط'
+        : 'مع مسؤوليات، لذلك التفاعل يحسب من 6 نقاط';
+      const finalGradeRule = totalPoints >= 9
+        ? '9 أو 10 نقاط = ممتاز جدا'
+        : totalPoints >= 7
+          ? '7 أو 8 نقاط = ممتاز'
+          : totalPoints >= 4
+            ? '4 إلى 6 نقاط = جيد جدا'
+            : '1 إلى 3 نقاط = سيء';
+      const isOut = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(`${entry.finalEval} ${entry.rawEval}`);
+      const isMemberSurvey = rankInfo.punish === 'dismiss';
+
+      if (isOut) out++;
+      else if (finalGrade === 'سيء') bad++;
+      else active++;
+      if (rankInfo.points && finalGrade !== 'سيء') pointRecords.push({ mention, grade: finalGrade });
+      if (!isOut && finalGrade === 'سيء' && rankInfo.punish === 'demote') demoteRecords.push(mention);
+      if (!isOut && finalGrade === 'سيء' && rankInfo.punish === 'dismiss') dismissRecords.push(mention);
+
+      output += isMemberSurvey
+        ? `الايدي : ${entry.id}\nتغيير الاسم : ${nameChanges} = ${nameChangePoints}\nاعطاء الرتب : ${roleGrants} = ${roleGrantPoints}\nاجمالي التكتات : ${totalTickets}\nاجمالي البوينتات : ${activityPoints}\nالرتبة الادارية : ${entry.rank || rankInfo.role}\nالتقييم النهائي : ${isOut ? cfg.outRoleMention : finalGrade}\n${separator}\n`
+        : `الايدي : ${entry.id}\nتغيير الاسم : ${nameChanges} = ${nameChangePoints}\nاعطاء الرتب : ${roleGrants} = ${roleGrantPoints}\nاجمالي التكتات : ${totalTickets}\nاجمالي البوينتات : ${activityPoints}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقييم : ${baseGrade}\nالمعدل : ${totalPoints}\nالرتبة الادارية : ${entry.rank || rankInfo.role}\nالتقييم النهائي : ${isOut ? cfg.outRoleMention : finalGrade}\n${separator}\n`;
+      finalInventory += `${mention}\nالتقييم : ${isOut ? cfg.outRoleMention : finalGrade}\nالرتبة الادارية : ${entry.rank || rankInfo.role}\n${finalSeparator}\n`;
+      reasonsOutput += `${mention}\n` +
+        `إجمالي التكتات: ${totalTickets} (${nameChanges} تغيير اسم + ${roleGrants} إعطاء رتب)\n` +
+        `نقاط تغيير الاسم: ${nameChanges} × 3 = ${nameChangePoints}\n` +
+        `نقاط إعطاء الرتب: ${roleGrants} × 5 = ${roleGrantPoints}\n` +
+        `إجمالي البوينتات: ${totalTickets} × 3 = ${activityPoints}\n` +
+        `التقييم الأساسي: ${baseGrade}، ${activityGradeRule}\n` +
+        `تقييم المسؤوليات: ${responsibilityGrade} = ${result.responsibilityPoints} نقاط\n` +
+        `نقاط تفاعل القسم: ${result.interactionPoints}، ${interactionRule}\n` +
+        `المعدل: ${result.responsibilityPoints} مسؤوليات + ${result.interactionPoints} تفاعل = ${totalPoints} من 10\n` +
+        `التقييم النهائي: ${isOut ? cfg.outRoleMention : finalGrade}، ${finalGradeRule}\n\n` +
+        `--------------------\n\n`;
+    });
+
+    const onePoint = pointRecords.filter((entry) => entry.grade === 'جيد جدا' || entry.grade === 'ممتاز').map((entry) => entry.mention);
+    const twoPoint = pointRecords.filter((entry) => entry.grade === 'ممتاز جدا').map((entry) => entry.mention);
+    const pointsOutput = buildRolesPointsSurvey(records).replace(/\r?\n/g, '\n');
+    const demoteOutput = buildRolesDemoteSurvey(records);
+    const dismissOutput = buildRolesDismissSurvey(records);
+
+    return {
+      output,
+      report: buildWeeklyReport(records.length, 0, out, bad, active, authorName),
+      total: records.length,
+      duplicates: [],
+      pointsOutput: pointsOutput || `${onePoint.join('\n')}\n${twoPoint.join('\n')}`,
+      demoteOutput,
+      dismissOutput,
+      reasonsOutput,
+      finalInventory
+    };
   }
 
   function buildEventDemoteSurvey(records) {
@@ -2105,6 +2306,10 @@ document.addEventListener('DOMContentLoaded', function () {
       return buildInterviewsSectionResult(input, authorName, cfg, getInterviewsMemberRanks());
     }
 
+    if (moduleKey === 'roles') {
+      return buildRolesOfficialSectionResult(input, authorName, cfg, getRolesOfficialMemberRanks());
+    }
+
     if (moduleKey === 'raqabh') {
       const lineSeparator = '**==============**';
       let result = `${lineSeparator}\n`;
@@ -2352,7 +2557,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
         return;
       }
       output.value = result.output;
-      if (reasonsOutput) reasonsOutput.value = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban' || moduleKey === 'interviews'
+      if (reasonsOutput) reasonsOutput.value = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban' || moduleKey === 'interviews' || moduleKey === 'roles'
         ? (result.reasonsOutput || '')
         : buildDepartmentReasons(result.output, moduleKey);
       if (finalOutput) finalOutput.value = result.finalInventory || buildFinalInventoryOutput(result.output);
