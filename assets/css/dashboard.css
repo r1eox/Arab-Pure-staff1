@@ -78,6 +78,48 @@ button, input, textarea {
   color: white;
 }
 
+.balance-module .balance-description {
+  color: var(--text-muted);
+  margin: 0 0 18px;
+  text-align: right;
+}
+
+.balance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.balance-card {
+  min-width: 0;
+}
+
+.balance-module textarea {
+  min-height: 220px;
+  direction: ltr;
+  text-align: left;
+}
+
+.balance-missing-card {
+  margin-top: 16px;
+}
+
+.balance-missing-members {
+  min-height: 170px !important;
+  border-color: rgba(248, 113, 113, 0.45) !important;
+}
+
+.balance-missing-count {
+  color: #f87171;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .balance-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .brand h2 {
   margin: 0;
   font-size: 1rem;

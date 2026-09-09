@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const navButtons = document.querySelectorAll('.nav-item');
   const mobileMenuToggle = document.getElementById('mobileMenuToggle');
   const mobileBackdrop = document.getElementById('mobileBackdrop');
+  let lastDuplicateEntries = [];
 
   function applySidebarModuleColors() {
     navButtons.forEach((button) => {
@@ -127,6 +128,11 @@ document.addEventListener('DOMContentLoaded', function () {
       reportOverride: null,
       accent: '#e74c3c',
       accentSoft: 'rgba(231, 76, 60, 0.15)'
+    },
+    balance: {
+      title: 'نظام مطابقة الأعضاء واستخراج الغائبين',
+      accent: '#3b82f6',
+      accentSoft: 'rgba(59, 130, 246, 0.15)'
     }
   };
 
@@ -834,6 +840,50 @@ document.addEventListener('DOMContentLoaded', function () {
   function parseScenarioNumber(value) {
     const match = String(value || '').replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
     return match ? Number(match[0]) : 0;
+  }
+
+  function deduplicateModuleInput(input, moduleKey) {
+    const source = String(input || '');
+    if (!source.trim()) return source;
+
+    const identityPattern = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
+      ? /(?=منشن\s*الشخص\s*:)/g
+      : /(?=الايدي\s*:)/g;
+    const blocks = source.split(identityPattern).filter((block) => block.trim());
+    const seen = new Set();
+    const kept = [];
+
+    blocks.forEach((block) => {
+      const identityLine = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
+        ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i)
+        : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
+      const identity = identityLine ? extractDiscordId(identityLine[1]) : '';
+      if (!identity || seen.has(identity)) return;
+      seen.add(identity);
+      kept.push(block.trim());
+    });
+
+    return kept.join('\n**==============**\n');
+  }
+
+  function findDuplicateModuleEntries(input, moduleKey) {
+    const source = String(input || '');
+    const identityPattern = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
+      ? /(?=منشن\s*الشخص\s*:)/g
+      : /(?=الايدي\s*:)/g;
+    const counts = {};
+
+    source.split(identityPattern).forEach((block) => {
+      const identityLine = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
+        ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i)
+        : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
+      const identity = identityLine ? extractDiscordId(identityLine[1]) : '';
+      if (identity) counts[identity] = (counts[identity] || 0) + 1;
+    });
+
+    return Object.keys(counts)
+      .filter((id) => counts[id] > 1)
+      .map((id) => ({ id, count: counts[id] }));
   }
 
   function parseScenarioHours(value) {
@@ -2282,6 +2332,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function processModuleData(input, authorName, moduleKey, responsibilityEvaluations = {}) {
     const cfg = moduleDefs[moduleKey] || moduleDefs.events;
+    lastDuplicateEntries = findDuplicateModuleEntries(input, moduleKey);
+    input = deduplicateModuleInput(input, moduleKey);
     if (!input.trim()) {
       return { output: '', report: '', total: 0, duplicates: [] };
     }
@@ -2627,8 +2679,9 @@ const source = data.userMention || data.userId || data.username || data.discordI
         }
       }
 
-      if (result.duplicates.length > 0) {
-        duplicateAlert.innerHTML = `⚠️ تنبيه: يوجد IDs مكررة: <br>${result.duplicates.map((d) => `- ${d.id} (تكرر ${d.count} مرات)`).join('<br>')}`;
+      const duplicateEntries = result.duplicates.length > 0 ? result.duplicates : lastDuplicateEntries;
+      if (duplicateEntries.length > 0) {
+        duplicateAlert.innerHTML = `⚠️ تنبيه: يوجد أشخاص مكررة: <br>${duplicateEntries.map((d) => `- <@${d.id}> (تكرر ${d.count} مرات)`).join('<br>')}`;
         duplicateAlert.style.display = 'block';
       } else {
         duplicateAlert.textContent = '';
@@ -2717,6 +2770,108 @@ const source = data.userMention || data.userId || data.username || data.discordI
     processCurrentModule();
   }
 
+  function extractBalanceIdentity(rawLine) {
+    const text = String(rawLine || '').replace(/[\u200B-\u200D\uFEFF\u200F]/g, '').trim();
+    if (!text || text.startsWith('➜') || text.startsWith('---') || /قائمه\s+اعضاء|مسؤول|مشرف/.test(text)) return null;
+
+    const userMention = text.match(/<@!?(\d{17,20})>/);
+    if (userMention) return { key: userMention[1], display: `<@${userMention[1]}>` };
+
+    const rawId = text.match(/(?:^|\D)(\d{17,20})(?:\D|$)/);
+    if (rawId) return { key: rawId[1], display: `<@${rawId[1]}>` };
+
+    const username = text.match(/@([a-zA-Z0-9_.-]+)/);
+    if (username) {
+      const value = username[1].toLowerCase().replace(/\.$/, '');
+      return { key: value, display: `@${value}` };
+    }
+
+    return null;
+  }
+
+  function parseBalanceMembers(rawText) {
+    const members = new Map();
+    String(rawText || '').split(/\r?\n/).forEach((line) => {
+      const member = extractBalanceIdentity(line);
+      if (member && !members.has(member.key)) members.set(member.key, member.display);
+    });
+    return members;
+  }
+
+  function parseBalanceAudited(rawText) {
+    const members = new Set();
+    String(rawText || '').split(/\r?\n/).forEach((line) => {
+      const member = extractBalanceIdentity(line);
+      if (member) members.add(member.key);
+    });
+    return members;
+  }
+
+  function compareBalanceLists(balancePanel) {
+    const allMembers = parseBalanceMembers(balancePanel.querySelector('.balance-all-members')?.value || '');
+    const auditedMembers = parseBalanceAudited(balancePanel.querySelector('.balance-audited-members')?.value || '');
+    const missingMembers = [...allMembers.entries()]
+      .filter(([key]) => !auditedMembers.has(key))
+      .map(([, display]) => display);
+
+    balancePanel.querySelector('.balance-missing-members').value = missingMembers.join('\n');
+    balancePanel.querySelector('.balance-total-count').textContent = `عدد الأعضاء الفعليين: ${allMembers.size}`;
+    balancePanel.querySelector('.balance-audited-count').textContent = `الموجودين بالجرد: ${allMembers.size - missingMembers.length}`;
+    balancePanel.querySelector('.balance-missing-count').textContent = `إجمالي الغير متواجدين: ${missingMembers.length}`;
+  }
+
+  function renderBalanceModule() {
+    moduleContent.innerHTML = `
+      <div class="module-shell balance-module">
+        <header class="module-header">
+          <h1>نظام مطابقة الأعضاء واستخراج الغائبين</h1>
+        </header>
+        <p class="balance-description">الصق قائمة الأعضاء الكاملة والجرد النهائي لمطابقة الموجودين واستخراج الغائبين تلقائيًا.</p>
+        <div class="balance-grid">
+          <div class="module-card balance-card">
+            <label>قائمة أعضاء القسم الكاملة</label>
+            <textarea class="balance-all-members" placeholder="الصق القائمة هنا..."></textarea>
+            <div class="stats-bar"><div class="stats-count balance-total-count">عدد الأعضاء الفعليين: 0</div></div>
+          </div>
+          <div class="module-card balance-card">
+            <label>استبيان الجرد النهائي للقسم</label>
+            <textarea class="balance-audited-members" placeholder="الصق الجرد المنسق هنا..."></textarea>
+            <div class="stats-bar"><div class="stats-count balance-audited-count">الموجودين بالجرد: 0</div></div>
+          </div>
+        </div>
+        <div class="module-card balance-card balance-missing-card">
+          <label>الأشخاص غير المتواجدين</label>
+          <textarea class="balance-missing-members" readonly placeholder="ستظهر قائمة الغائبين هنا..."></textarea>
+          <div class="stats-bar"><div class="balance-missing-count">إجمالي الغير متواجدين: 0</div></div>
+        </div>
+        <div class="module-actions">
+          <button class="primary balance-compare" type="button">مطابقة وفحص</button>
+          <button class="secondary balance-copy" type="button">نسخ قائمة الغائبين</button>
+          <button class="secondary balance-clear" type="button">مسح الكل</button>
+        </div>
+      </div>
+    `;
+
+    const balancePanel = moduleContent.querySelector('.balance-module');
+    const allMembers = balancePanel.querySelector('.balance-all-members');
+    const auditedMembers = balancePanel.querySelector('.balance-audited-members');
+    const missingMembers = balancePanel.querySelector('.balance-missing-members');
+
+    allMembers.addEventListener('input', () => compareBalanceLists(balancePanel));
+    auditedMembers.addEventListener('input', () => compareBalanceLists(balancePanel));
+    balancePanel.querySelector('.balance-compare').addEventListener('click', () => compareBalanceLists(balancePanel));
+    balancePanel.querySelector('.balance-copy').addEventListener('click', () => {
+      copyText(missingMembers.value);
+      showToast('تم نسخ قائمة الغائبين');
+    });
+    balancePanel.querySelector('.balance-clear').addEventListener('click', () => {
+      allMembers.value = '';
+      auditedMembers.value = '';
+      compareBalanceLists(balancePanel);
+    });
+    compareBalanceLists(balancePanel);
+  }
+
   function renderModule(key) {
     const safeKey = Object.prototype.hasOwnProperty.call(moduleDefs, key) ? key : 'events';
     const activeDef = moduleDefs[safeKey];
@@ -2730,6 +2885,11 @@ const source = data.userMention || data.userId || data.username || data.discordI
       button.style.setProperty('--nav-accent', moduleDefs[button.dataset.module]?.accent || '#60a5fa');
       button.style.setProperty('--nav-accent-soft', moduleDefs[button.dataset.module]?.accentSoft || 'rgba(96,165,250,0.15)');
     });
+
+    if (safeKey === 'balance') {
+      renderBalanceModule();
+      return;
+    }
 
     moduleContent.innerHTML = `
       <div class="module-shell">
