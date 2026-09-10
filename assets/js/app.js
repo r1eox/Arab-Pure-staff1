@@ -1191,6 +1191,10 @@ document.addEventListener('DOMContentLoaded', function () {
     let bad = 0;
     let out = 0;
     let active = 0;
+    let temporaryBandTotal = 0;
+    let finalBandTotal = 0;
+    let bandTicketTotal = 0;
+    let unbanTotal = 0;
 
     String(input || '').replace(/[\u200B-\u200D\uFEFF\u200F]/g, '').split(/\*\*==============\*\*|(?=منشن\s*الشخص\s*:)/).forEach((block) => {
       if (!block.trim()) return;
@@ -1242,14 +1246,25 @@ document.addEventListener('DOMContentLoaded', function () {
       if (isOut) out++;
       else if (/سيء|سئ|عدم تفاعل/.test(evaluation)) bad++; else active++;
       const pointValue = /ممتاز\s*جدا/.test(finalEvaluation) ? 2 : /ممتاز|جيد\s*جدا/.test(finalEvaluation) ? 1 : 0;
+      temporaryBandTotal += data.temporary;
+      finalBandTotal += data.permanent;
+      bandTicketTotal += data.tickets;
+      unbanTotal += data.unban;
       if (rankInfo.points && pointValue && !isOut) points[pointValue].push(mention);
       if (!isOut && /سيء|سئ|عدم تفاعل/.test(finalEvaluation) && rankInfo.punish === 'demote') demote.push(mention);
       if (!isOut && /سيء|سئ|عدم تفاعل/.test(finalEvaluation) && rankInfo.punish === 'dismiss') dismiss.push(mention);
-      reasonsOutput += `${mention}\nتكتات الباند: ${data.tickets} × 10 = ${data.tickets * 10}\nالباند المؤقت: ${data.temporary} × 10 = ${data.temporary * 10}\nالباند النهائي: ${data.permanent} × 10 = ${data.permanent * 10}\nفك الباند: ${data.unban} × 3 = ${data.unban * 3}\nنقاط دفتر الحضور: ${hoursPoints}\nنقاط حضور الجرد: ${attendancePoints}\nنقاط المسؤوليات: ${responsibilityPoints}\nالتقييم: ${evaluation}\nتقييم المسؤوليات: ${responsibilityGrade}\nالتقييم النهائي: ${finalEvaluation}\nإجمالي البوينتات: ${totalPoints}\n\n`;
-      output += `منشن الشخص : ${mention}\nالايدي : ${data.id}\nالرتبة الادارية : ${data.rank}\nتكتات الباند : ${data.tickets}\nباند مؤقت : ${data.temporary}\nالباند النهائي : ${data.permanent}\nفك باند : ${data.unban}\nالنقاط : ${totalPoints}\nالتقييم : ${evaluation}\nالتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      reasonsOutput += `${mention}\nعدد الساعات: ${data.hours}\nتكتات الباند: ${data.tickets} × 10 = ${data.tickets * 10}\nالباند المؤقت: ${data.temporary} × 10 = ${data.temporary * 10}\nالباند النهائي: ${data.permanent} × 10 = ${data.permanent * 10}\nفك الباند: ${data.unban} × 3 = ${data.unban * 3}\nنقاط دفتر الحضور: ${hoursPoints}\nنقاط حضور الجرد: ${attendancePoints}\nنقاط المسؤوليات: ${responsibilityPoints}\nالتقييم: ${evaluation}\nتقييم المسؤوليات: ${responsibilityGrade}\nالتقييم النهائي: ${finalEvaluation}\nإجمالي البوينتات: ${totalPoints}\n\n`;
+      output += `منشن الشخص : ${mention}\nالايدي : ${data.id}\nعدد الساعات : ${data.hours}\nالرتبة الادارية : ${data.rank}\nتكتات الباند : ${data.tickets}\nباند مؤقت : ${data.temporary}\nالباند النهائي : ${data.permanent}\nفك باند : ${data.unban}\nالنقاط : ${totalPoints}\nالتقييم : ${evaluation}\nالتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
       finalInventory += `${mention}\nالتقييم : ${finalEvaluation}\nالرتبة الادارية : ${data.rank}\n${finalSeparator}\n`;
     });
-    return { output, report: buildWeeklyReport(total, 0, out, bad, active, authorName), total, duplicates: [], pointsOutput: buildBanPointsText(points), demoteOutput: buildBanPenaltyText(demote, 'كسر'), dismissOutput: buildBanPenaltyText(dismiss, 'اعفاء'), reasonsOutput, finalInventory };
+    const bandSummary = {
+      temporary: temporaryBandTotal,
+      permanent: finalBandTotal,
+      tickets: bandTicketTotal,
+      unban: unbanTotal,
+      text: `باند: مؤقت ${temporaryBandTotal} | نهائي ${finalBandTotal} | تكتات ${bandTicketTotal} | فك باند ${unbanTotal}`
+    };
+    return { output, report: buildWeeklyReport(total, 0, out, bad, active, authorName), total, duplicates: [], pointsOutput: buildBanPointsText(points), demoteOutput: buildBanPenaltyText(demote, 'كسر'), dismissOutput: buildBanPenaltyText(dismiss, 'اعفاء'), reasonsOutput, finalInventory, bandSummary };
   }
 
   function buildBanPointsText(points) {
@@ -2690,6 +2705,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
     const report = inventoryPanel ? inventoryPanel.querySelector('.module-report') : moduleContent.querySelector('.module-report');
     const authorInput = inventoryPanel ? inventoryPanel.querySelector('.module-author') : moduleContent.querySelector('.module-author');
     const totalCount = inventoryPanel ? inventoryPanel.querySelector('.stats-count') : moduleContent.querySelector('.stats-count');
+    const banStats = inventoryPanel ? inventoryPanel.querySelector('.stats-ban-total') : moduleContent.querySelector('.stats-ban-total');
     const duplicateAlert = inventoryPanel ? inventoryPanel.querySelector('.stats-duplicates') : moduleContent.querySelector('.stats-duplicates');
     const eventsTotal = inventoryPanel ? inventoryPanel.querySelector('.stats-events-total') : null;
     const membersField = moduleContent.querySelector('.module-members');
@@ -2709,6 +2725,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
         if (finalOutput) finalOutput.value = '';
         report.value = '';
         totalCount.textContent = 'إجمالي العدد: 0';
+        if (banStats) banStats.textContent = 'باند: مؤقت 0 | نهائي 0 | تكتات 0 | فك باند 0';
         return;
       }
       output.value = result.output;
@@ -2718,6 +2735,10 @@ const source = data.userMention || data.userId || data.username || data.discordI
       if (finalOutput) finalOutput.value = result.finalInventory || buildFinalInventoryOutput(result.output);
       report.value = result.report;
       totalCount.textContent = `إجمالي العدد: ${result.total}`;
+      if (moduleKey === 'ban' && banStats) {
+        const summary = result.bandSummary || { temporary: 0, permanent: 0, tickets: 0, unban: 0 };
+        banStats.textContent = `باند: مؤقت ${summary.temporary} | نهائي ${summary.permanent} | تكتات ${summary.tickets} | فك باند ${summary.unban}`;
+      }
       if (eventsTotal) eventsTotal.textContent = `إجمالي عدد الفعاليات: ${result.totalEvents || 0}`;
 
       if (moduleKey === 'events' || moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'interviews' || moduleKey === 'ban' || moduleKey === 'roles') {
@@ -2861,6 +2882,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
       report.value = '';
       authorInput.value = '';
       totalCount.textContent = 'إجمالي العدد: 0';
+      if (banStats) banStats.textContent = 'باند: مؤقت 0 | نهائي 0 | تكتات 0 | فك باند 0';
       if (eventsTotal) eventsTotal.textContent = 'إجمالي عدد الفعاليات: 0';
       duplicateAlert.style.display = 'none';
       duplicateAlert.textContent = '';
@@ -3026,6 +3048,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
               <textarea class="module-output" readonly placeholder="ستظهر النتيجة هنا..."></textarea>
               <div class="stats-bar">
                 <div class="stats-count">إجمالي العدد: 0</div>
+                ${safeKey === 'ban' ? '<div class="stats-count stats-ban-total">باند: مؤقت 0 | نهائي 0 | تكتات 0 | فك باند 0</div>' : ''}
                 ${safeKey === 'events' ? '<div class="stats-count stats-events-total">إجمالي عدد الفعاليات: 0</div>' : ''}
                 <div class="stats-duplicates" style="display: none;"></div>
               </div>
