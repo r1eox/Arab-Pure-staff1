@@ -976,7 +976,7 @@ document.addEventListener('DOMContentLoaded', function () {
         else if (/دفتر الحضور/.test(key)) values.attendance = value;
         else if (/مسؤول الجرد/.test(key)) values.inventory = value;
         else if (/مشرف المسؤوليات/.test(key)) values.responsibilitySupervisor = value;
-        else if (/تقييم المسؤوليات النهائي|تقيم المسؤوليات النهائي|تقييم المسؤوليات|تقيم المسؤوليات|التقييم النهائي|التقيم النهائي/.test(key)) values.final = value;
+        else if (/التقييم بالمسؤوليات|التقيم بالمسؤوليات|تقييم المسؤوليات النهائي|تقيم المسؤوليات النهائي|تقييم المسؤوليات|تقيم المسؤوليات|التقييم النهائي|التقيم النهائي/.test(key)) values.final = value;
       });
       if (userId) map[userId] = values;
     });
@@ -988,7 +988,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const cleanInput = String(input || '').replace(/[\u200B-\u200D\uFEFF\u200F]/g, '');
     cleanInput.split(/(?=منشن\s*الشخص\s*:)|\*\*==============\*\*/g).forEach((block) => {
       if (!/منشن\s*الشخص/.test(block)) return;
-      const record = { mention: '', id: '', adminRank: '', thiefHours: '', scenarioHours: '', generalHours: '', totalHours: '', completedRooms: '', common: 0, jewelry: '', central: '', home: '', scenarioPoints: 0, photos: '', stolenPhotos: 0, rawGrade: '' };
+      const record = { mention: '', id: '', adminRank: '', thiefHours: '', scenarioHours: '', generalHours: '', totalHours: '', completedRooms: '', common: 0, jewelry: '', central: '', home: '', scenarioPoints: 0, photos: '', stolenPhotos: 0, rawGrade: '', responsibilityEval: '' };
       block.split(/\r?\n/).forEach((line) => {
         const separator = line.indexOf(':');
         if (separator < 0) return;
@@ -1009,6 +1009,7 @@ document.addEventListener('DOMContentLoaded', function () {
         else if (/اجمالي نقاط السيناريوهات/.test(key)) record.scenarioPoints = parseScenarioNumber(value);
         else if (/مراقبة\s*(?:300|400)\s*صورة/.test(key)) record.photos = value;
         else if (/مجموع الصور للسرقات/.test(key)) record.stolenPhotos = parseScenarioNumber(value);
+        else if (/التقييم بالمسؤوليات|التقيم بالمسؤوليات|تقييم المسؤوليات|تقيم المسؤوليات|التقييم النهائي|التقيم النهائي/.test(key)) record.responsibilityEval = value;
         else if (/التقييم النهائي|التقيم النهائي/.test(key)) record.rawGrade = value;
       });
       record.identity = extractDiscordId(record.mention) || scenarioIdentityKey(record.mention) || scenarioIdentityKey(record.id);
@@ -2382,7 +2383,8 @@ document.addEventListener('DOMContentLoaded', function () {
       const extraPoints = hoursBonus + photosBonus + responsibilityPoints;
       const totalPoints = hoursPoints + scenarioPoints + extraPoints;
       const baseGrade = scenarioGradeFromPoints(totalPoints);
-      const individualResponsibilityValues = [responsibilities.images, responsibilities.notes, responsibilities.leaves, responsibilities.warnings]
+      const directResponsibilityValue = data.responsibilityEval ? scenarioResponsibilityGrade(data.responsibilityEval) : '';
+      const individualResponsibilityValues = [directResponsibilityValue, responsibilities.images, responsibilities.notes, responsibilities.leaves, responsibilities.warnings]
         .map(scenarioResponsibilityGrade)
         .filter(Boolean);
       const responsibilityValues = individualResponsibilityValues;
