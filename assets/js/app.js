@@ -2698,6 +2698,33 @@ const source = data.userMention || data.userId || data.username || data.discordI
     });
   }
 
+  function getDraftFields() {
+    return [...moduleContent.querySelectorAll('textarea:not([readonly])')];
+  }
+
+  function saveModuleDraft(field) {
+    if (field.id) localStorage.setItem(`draft_${field.id}`, field.value);
+  }
+
+  function restoreModuleDrafts() {
+    let restored = false;
+    getDraftFields().forEach((field) => {
+      if (!field.id) return;
+      const draft = localStorage.getItem(`draft_${field.id}`);
+      if (draft !== null) {
+        field.value = draft;
+        restored = true;
+      }
+    });
+    return restored;
+  }
+
+  function clearModuleDrafts() {
+    getDraftFields().forEach((field) => {
+      if (field.id) localStorage.removeItem(`draft_${field.id}`);
+    });
+  }
+
   function bindModuleActions(moduleKey) {
     const inventoryPanel = moduleContent.querySelector('.subtab-panel[data-panel="inventory"]');
     const input = inventoryPanel ? inventoryPanel.querySelector('.module-input') : moduleContent.querySelector('.module-input');
@@ -2818,6 +2845,11 @@ const source = data.userMention || data.userId || data.username || data.discordI
 
     const sharedFields = moduleContent.querySelectorAll(`[data-sync-group="${moduleKey}-shared"]`);
 
+    moduleContent.querySelectorAll('textarea:not([readonly])').forEach((field) => {
+      field.addEventListener('input', () => saveModuleDraft(field));
+      field.addEventListener('change', () => saveModuleDraft(field));
+    });
+
     sharedFields.forEach((field) => {
       field.addEventListener('input', () => {
         sharedFields.forEach((otherField) => {
@@ -2877,6 +2909,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
       showToast(moduleKey === 'events' ? 'تم نسخ قائمة المتصدرين' : 'تم نسخ نقل الجرد');
     });
     clearBtn?.addEventListener('click', () => {
+      clearModuleDrafts();
       input.value = '';
       output.value = '';
       if (reasonsOutput) reasonsOutput.value = '';
@@ -2896,6 +2929,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
       if (responsibilitiesField) responsibilitiesField.value = '';
     });
 
+    restoreModuleDrafts();
     processCurrentModule();
   }
 
@@ -2959,12 +2993,12 @@ const source = data.userMention || data.userId || data.username || data.discordI
         <div class="balance-grid">
           <div class="module-card balance-card">
             <label>قائمة أعضاء القسم الكاملة</label>
-            <textarea class="balance-all-members" placeholder="الصق القائمة هنا..."></textarea>
+            <textarea id="balance-all-members" class="balance-all-members" placeholder="الصق القائمة هنا..."></textarea>
             <div class="stats-bar"><div class="stats-count balance-total-count">عدد الأعضاء الفعليين: 0</div></div>
           </div>
           <div class="module-card balance-card">
             <label>استبيان الجرد النهائي للقسم</label>
-            <textarea class="balance-audited-members" placeholder="الصق الجرد المنسق هنا..."></textarea>
+            <textarea id="balance-audited-members" class="balance-audited-members" placeholder="الصق الجرد المنسق هنا..."></textarea>
             <div class="stats-bar"><div class="stats-count balance-audited-count">الموجودين بالجرد: 0</div></div>
           </div>
         </div>
@@ -2986,18 +3020,25 @@ const source = data.userMention || data.userId || data.username || data.discordI
     const auditedMembers = balancePanel.querySelector('.balance-audited-members');
     const missingMembers = balancePanel.querySelector('.balance-missing-members');
 
-    allMembers.addEventListener('input', () => compareBalanceLists(balancePanel));
-    auditedMembers.addEventListener('input', () => compareBalanceLists(balancePanel));
+    [allMembers, auditedMembers].forEach((field) => {
+      field.addEventListener('input', () => {
+        saveModuleDraft(field);
+        compareBalanceLists(balancePanel);
+      });
+      field.addEventListener('change', () => saveModuleDraft(field));
+    });
     balancePanel.querySelector('.balance-compare').addEventListener('click', () => compareBalanceLists(balancePanel));
     balancePanel.querySelector('.balance-copy').addEventListener('click', () => {
       copyText(missingMembers.value);
       showToast('تم نسخ قائمة الغائبين');
     });
     balancePanel.querySelector('.balance-clear').addEventListener('click', () => {
+      clearModuleDrafts();
       allMembers.value = '';
       auditedMembers.value = '';
       compareBalanceLists(balancePanel);
     });
+    restoreModuleDrafts();
     compareBalanceLists(balancePanel);
   }
 
@@ -3037,12 +3078,12 @@ const source = data.userMention || data.userId || data.username || data.discordI
           <div class="module-grid">
             <div class="module-card">
               <label>${activeDef.inputLabel}</label>
-              <textarea class="module-input" data-sync-group="${safeKey}-shared" placeholder="${activeDef.inputPlaceholder}"></textarea>
+              <textarea id="${safeKey}-input" class="module-input" data-sync-group="${safeKey}-shared" placeholder="${activeDef.inputPlaceholder}"></textarea>
             </div>
 
             <div class="module-card">
               <label>تقييم المسؤوليات</label>
-              <textarea class="module-responsibilities" placeholder="منشن العضو : تقييم المسؤوليات\n\nأو\n\nالايدي : 123...\nالتقييم بالمسؤوليات : ممتاز"></textarea>
+              <textarea id="${safeKey}-responsibilities" class="module-responsibilities" placeholder="منشن العضو : تقييم المسؤوليات\n\nأو\n\nالايدي : 123...\nالتقييم بالمسؤوليات : ممتاز"></textarea>
             </div>
 
             <div class="module-card">
@@ -3069,7 +3110,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
 
           <div class="module-card full-width">
             <label>أعضاء القسم ورتبهم من الهيدرات</label>
-            <textarea class="module-members" placeholder="➜ <@&ROLE_ID>\n- <@USER_ID>"></textarea>
+            <textarea id="${safeKey}-members" class="module-members" placeholder="➜ <@&ROLE_ID>\n- <@USER_ID>"></textarea>
           </div>
 
           <div class="module-card full-width">
