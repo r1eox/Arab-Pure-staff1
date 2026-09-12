@@ -422,6 +422,26 @@ body.menu-open .mobile-backdrop {
   min-height: 180px;
 }
 
+.event-member-lists {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.department-member-lists {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.event-member-lists label {
+  margin-bottom: 0;
+}
+
+.event-member-lists textarea {
+  min-height: 230px;
+}
+
 .row-input {
   display: flex;
   align-items: center;
@@ -693,6 +713,14 @@ body.menu-open .mobile-backdrop {
   }
 
   .module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .event-member-lists {
+    grid-template-columns: 1fr;
+  }
+
+  .department-member-lists {
     grid-template-columns: 1fr;
   }
 }

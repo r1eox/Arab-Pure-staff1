@@ -390,6 +390,14 @@ document.addEventListener('DOMContentLoaded', function () {
     return normalized.includes('خارجالخدمة') || normalized.includes('خارجخدمة');
   }
 
+  function applyMemberStatus(evaluation, identity, memberStatuses, outLabel) {
+    const text = String(evaluation || '');
+    const isBad = /سيء|سئ|سيئ|عدم تفاعل/.test(text);
+    if (isBad && memberStatuses.out.has(identity)) return outLabel;
+    if (isBad && memberStatuses.new.has(identity)) return 'جديد';
+    return evaluation;
+  }
+
   function buildWeeklyReport(processedCount, countNew, countOut, countBad, countActive, authorName) {
     return `** كم العدد حالي بالقسم: ${processedCount}\n\n` +
       `كم عدد ماخذين اجازة : ${countOut} ( ${countNew}جديد)\n\n` +
@@ -658,25 +666,40 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function getEventMemberRanks() {
-    const field = moduleContent.querySelector('.module-members');
     const map = {};
-    if (!field || !field.value.trim()) return map;
-
-    let currentRole = eventDepartmentRoles.member;
-    field.value.split(/\r?\n/).forEach((line) => {
-      const text = line.trim();
-      if (!text) return;
-
-      const roles = text.match(/<@&\d{17,20}>/g);
-      if (roles && (text.includes('➜') || text.includes('<@&'))) {
-        currentRole = roles[roles.length - 1];
-        return;
-      }
-
-      const userId = extractDiscordId(text);
-      if (userId) map[userId] = currentRole;
+    moduleContent.querySelectorAll('.module-member-list').forEach((field) => {
+      if (!field.value.trim()) return;
+      let currentRole = eventDepartmentRoles.member;
+      field.value.split(/\r?\n/).forEach((line) => {
+        const text = line.trim();
+        if (!text) return;
+        const roles = text.match(/<@&\d{17,20}>/g);
+        if (roles && (text.includes('➜') || text.includes('<@&'))) {
+          currentRole = roles[roles.length - 1];
+          return;
+        }
+        const userId = extractDiscordId(text);
+        if (userId) map[userId] = currentRole;
+      });
     });
     return map;
+  }
+
+  function getModuleMemberStatuses() {
+    const statuses = { new: new Set(), out: new Set() };
+    moduleContent.querySelectorAll('.module-members-new').forEach((field) => {
+      field.value.split(/\r?\n/).forEach((line) => {
+        const userId = extractDiscordId(line);
+        if (userId) statuses.new.add(userId);
+      });
+    });
+    moduleContent.querySelectorAll('.module-members-out').forEach((field) => {
+      field.value.split(/\r?\n/).forEach((line) => {
+        const userId = extractDiscordId(line);
+        if (userId) statuses.out.add(userId);
+      });
+    });
+    return statuses;
   }
 
   function getScenarioMemberRanks() {
@@ -1042,7 +1065,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return map;
   }
 
-  function buildRaqabhSectionResult(input, authorName, cfg, memberRanks = {}) {
+  function buildRaqabhSectionResult(input, authorName, cfg, memberRanks = {}, memberStatuses = { new: new Set(), out: new Set() }) {
     const separator = '**==============**';
     const finalSeparator = '`-----------------------------------------------------`';
     let output = `${separator}\n`;
@@ -1100,8 +1123,10 @@ document.addEventListener('DOMContentLoaded', function () {
         scenarioResponsibilityPoints(responsibilities.supervisor, 200);
       const totalPoints = hoursPoints + roomsBonus + responsibilityPoints;
       const evaluation = data.finalEval || data.rawEval || scenarioGradeFromPoints(totalPoints);
-      const isOut = /خارج\s*الخدمة|إجازة|اجازة/.test(evaluation);
-      const finalEvaluation = isOut ? cfg.outRoleMention : calculateScenarioFinalGrade(evaluation, responsibilityGrade, badResponsibilityCount);
+      const explicitOut = /خارج\s*الخدمة|إجازة|اجازة/.test(evaluation);
+      let finalEvaluation = explicitOut ? cfg.outRoleMention : calculateScenarioFinalGrade(evaluation, responsibilityGrade, badResponsibilityCount);
+      finalEvaluation = applyMemberStatus(finalEvaluation, identity, memberStatuses, cfg.outRoleMention);
+      const isOut = explicitOut || finalEvaluation === cfg.outRoleMention;
       total++;
       if (/سيء|سئ|عدم تفاعل/.test(evaluation)) bad++;
       else if (!isOut) active++;
@@ -1178,7 +1203,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return map;
   }
 
-  function buildBanSectionResult(input, authorName, cfg, memberRanks = {}) {
+  function buildBanSectionResult(input, authorName, cfg, memberRanks = {}, memberStatuses = { new: new Set(), out: new Set() }) {
     const separator = '**==============**';
     const finalSeparator = '`-----------------------------------------------------`';
     let output = `${separator}\n`;
@@ -1241,8 +1266,10 @@ document.addEventListener('DOMContentLoaded', function () {
       const providedEvaluation = [data.finalEval, data.rawEval].find((value) => value && !/لايوجد|لا يوجد/i.test(value));
       const evaluation = providedEvaluation || banGradeFromPoints(totalPoints);
       const sourceText = [data.finalEval, data.rawEval, data.responsibilityEval, data.rank].join(' ');
-      const isOut = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(sourceText) || sourceText.includes(cfg.outRoleId) || sourceText.includes(cfg.outRoleMention);
-      const finalEvaluation = isOut ? cfg.outRoleMention : calculateScenarioFinalGrade(evaluation, responsibilityGrade, badResponsibilityCount);
+      const explicitOut = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(sourceText) || sourceText.includes(cfg.outRoleId) || sourceText.includes(cfg.outRoleMention);
+      let finalEvaluation = explicitOut ? cfg.outRoleMention : calculateScenarioFinalGrade(evaluation, responsibilityGrade, badResponsibilityCount);
+      finalEvaluation = applyMemberStatus(finalEvaluation, identity, memberStatuses, cfg.outRoleMention);
+      const isOut = explicitOut || finalEvaluation === cfg.outRoleMention;
       total++;
       if (isOut) out++;
       else if (/سيء|سئ|عدم تفاعل/.test(evaluation)) bad++; else active++;
@@ -1792,7 +1819,7 @@ document.addEventListener('DOMContentLoaded', function () {
       '|| <@&1135000856043995234> ||';
   }
 
-  function buildRolesOfficialSectionResult(input, authorName, cfg, memberRanks = {}) {
+  function buildRolesOfficialSectionResult(input, authorName, cfg, memberRanks = {}, memberStatuses = { new: new Set(), out: new Set() }) {
     const separator = '**==============**';
     const finalSeparator = '`-----------------------------------------------------`';
     let output = `${separator}\n`;
@@ -1840,20 +1867,23 @@ document.addEventListener('DOMContentLoaded', function () {
           : totalPoints >= 4
             ? '4 إلى 6 نقاط = جيد جدا'
             : '1 إلى 3 نقاط = سيء';
-      const isOut = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(`${entry.finalEval} ${entry.rawEval}`);
+      const identity = extractDiscordId(entry.id);
+      const explicitOut = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(`${entry.finalEval} ${entry.rawEval}`);
+      const adjustedFinalGrade = applyMemberStatus(finalGrade, identity, memberStatuses, cfg.outRoleMention);
+      const isOut = explicitOut || adjustedFinalGrade === cfg.outRoleMention;
       const isMemberSurvey = rankInfo.punish === 'dismiss';
 
       if (isOut) out++;
-      else if (finalGrade === 'سيء') bad++;
+      else if (adjustedFinalGrade === 'سيء') bad++;
       else active++;
       if (rankInfo.points && finalGrade !== 'سيء') pointRecords.push({ mention, grade: finalGrade });
       if (!isOut && finalGrade === 'سيء' && rankInfo.punish === 'demote') demoteRecords.push(mention);
       if (!isOut && finalGrade === 'سيء' && rankInfo.punish === 'dismiss') dismissRecords.push(mention);
 
       output += isMemberSurvey
-        ? `الايدي : ${entry.id}\nتغيير الاسم : ${nameChanges} = ${nameChangePoints}\nاعطاء الرتب : ${roleGrants} = ${roleGrantPoints}\nاجمالي التكتات : ${totalTickets}\nاجمالي البوينتات : ${activityPoints}\nالرتبة الادارية : ${entry.rank || rankInfo.role}\nالتقييم النهائي : ${isOut ? cfg.outRoleMention : finalGrade}\n${separator}\n`
-        : `الايدي : ${entry.id}\nتغيير الاسم : ${nameChanges} = ${nameChangePoints}\nاعطاء الرتب : ${roleGrants} = ${roleGrantPoints}\nاجمالي التكتات : ${totalTickets}\nاجمالي البوينتات : ${activityPoints}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقييم : ${baseGrade}\nالمعدل : ${totalPoints}\nالرتبة الادارية : ${entry.rank || rankInfo.role}\nالتقييم النهائي : ${isOut ? cfg.outRoleMention : finalGrade}\n${separator}\n`;
-      finalInventory += `${mention}\nالتقييم : ${isOut ? cfg.outRoleMention : finalGrade}\nالرتبة الادارية : ${entry.rank || rankInfo.role}\n${finalSeparator}\n`;
+        ? `الايدي : ${entry.id}\nتغيير الاسم : ${nameChanges} = ${nameChangePoints}\nاعطاء الرتب : ${roleGrants} = ${roleGrantPoints}\nاجمالي التكتات : ${totalTickets}\nاجمالي البوينتات : ${activityPoints}\nالرتبة الادارية : ${entry.rank || rankInfo.role}\nالتقييم النهائي : ${isOut ? cfg.outRoleMention : adjustedFinalGrade}\n${separator}\n`
+        : `الايدي : ${entry.id}\nتغيير الاسم : ${nameChanges} = ${nameChangePoints}\nاعطاء الرتب : ${roleGrants} = ${roleGrantPoints}\nاجمالي التكتات : ${totalTickets}\nاجمالي البوينتات : ${activityPoints}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقييم : ${baseGrade}\nالمعدل : ${totalPoints}\nالرتبة الادارية : ${entry.rank || rankInfo.role}\nالتقييم النهائي : ${isOut ? cfg.outRoleMention : adjustedFinalGrade}\n${separator}\n`;
+      finalInventory += `${mention}\nالتقييم : ${isOut ? cfg.outRoleMention : adjustedFinalGrade}\nالرتبة الادارية : ${entry.rank || rankInfo.role}\n${finalSeparator}\n`;
       reasonsOutput += `${mention}\n` +
         `إجمالي التكتات: ${totalTickets} (${nameChanges} تغيير اسم + ${roleGrants} إعطاء رتب)\n` +
         `نقاط تغيير الاسم: ${nameChanges} × 3 = ${nameChangePoints}\n` +
@@ -2007,7 +2037,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return 'سيء';
   }
 
-  function buildInterviewsSectionResult(input, authorName, cfg, memberRanks = {}) {
+  function buildInterviewsSectionResult(input, authorName, cfg, memberRanks = {}, memberStatuses = { new: new Set(), out: new Set() }) {
     const separator = '**==============**';
     const finalSeparator = '`-----------------------------------------------------`';
     let output = `${separator}\n`;
@@ -2055,8 +2085,10 @@ document.addEventListener('DOMContentLoaded', function () {
       const totalPoints = responsibilityPoints + interactionPoints;
       const evaluation = interviewsFinalGradeFromTotal(totalPoints);
       const sourceText = `${data.finalEval} ${data.rawEval} ${data.responsibilityEval} ${data.id}`;
-      const isOut = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(sourceText) || sourceText.includes(cfg.outRoleId) || sourceText.includes(cfg.outRoleMention);
-      const finalEvaluation = isOut ? cfg.outRoleMention : evaluation;
+      const explicitOut = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(sourceText) || sourceText.includes(cfg.outRoleId) || sourceText.includes(cfg.outRoleMention);
+      let finalEvaluation = explicitOut ? cfg.outRoleMention : evaluation;
+      finalEvaluation = applyMemberStatus(finalEvaluation, identity, memberStatuses, cfg.outRoleMention);
+      const isOut = explicitOut || finalEvaluation === cfg.outRoleMention;
       const baseGrade = evaluation;
 
       total++;
@@ -2091,7 +2123,7 @@ document.addEventListener('DOMContentLoaded', function () {
     };
   }
 
-  function buildEventSectionResult(input, authorName, cfg, memberRanks = {}, responsibilityEvaluations = {}) {
+  function buildEventSectionResult(input, authorName, cfg, memberRanks = {}, responsibilityEvaluations = {}, memberStatuses = { new: new Set(), out: new Set() }) {
     const lineSeparator = '**==============**';
     const finalInventorySeparator = '`-----------------------------------------------------`';
     const blocks = input.split(/={3,}/);
@@ -2153,6 +2185,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
       const cleanRank = cleanAndStandardizeRank(data.rank);
       const userId = extractDiscordId(data.id);
+      const isNewMember = userId && memberStatuses.new.has(userId);
+      const isListedOutOfService = userId && memberStatuses.out.has(userId);
       if (Object.keys(responsibilityEvaluations).length > 0) {
         data.respEval = responsibilityEvaluations[userId] || 'لايوجد مسؤوليات';
       } else if (!data.respEval) {
@@ -2181,8 +2215,10 @@ document.addEventListener('DOMContentLoaded', function () {
         isOutOfServiceText(data.rawEval) ||
         isOutOfServiceText(data.respEval);
 
-      if (isOutOfServiceRole || hasOutOfServiceInText) {
+      if (isOutOfServiceRole || hasOutOfServiceInText || (isListedOutOfService && finalRating === 'سيء')) {
         finalRating = 'خارج خدمة';
+      } else if (isNewMember && !['جيد جدا', 'ممتاز', 'ممتاز جدا'].includes(finalRating)) {
+        finalRating = 'جديد';
       }
 
       const calculatedSectionPoints = finalRating.includes('ممتاز جدا') ? 3 : finalRating.includes('ممتاز') ? 2 : finalRating.includes('جيد جدا') ? 1 : 0;
@@ -2341,7 +2377,7 @@ document.addEventListener('DOMContentLoaded', function () {
       .join('\n\n') || 'لا يوجد متصدرين';
   }
 
-  function buildScenarioSectionResult(input, authorName, cfg, memberRanks = {}, responsibilityEvaluations = {}) {
+  function buildScenarioSectionResult(input, authorName, cfg, memberRanks = {}, responsibilityEvaluations = {}, memberStatuses = { new: new Set(), out: new Set() }) {
     const lineSeparator = '**==============**';
     const finalInventorySeparator = '`-----------------------------------------------------`';
     let result = `${lineSeparator}\n`;
@@ -2394,8 +2430,10 @@ document.addEventListener('DOMContentLoaded', function () {
         ? lowerScenarioGradeByCount(highestResponsibility, badResponsibilityCount)
         : highestResponsibility;
       const sourceText = [data.rawGrade, data.adminRank, data.mention, data.id].join(' ');
-      const isOutOfService = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(sourceText) || sourceText.includes(cfg.outRoleId) || sourceText.includes(cfg.outRoleMention);
-      let finalRating = isOutOfService ? cfg.outRoleMention : calculateScenarioFinalGrade(baseGrade, responsibilityGrade, badResponsibilityCount);
+      const explicitOutOfService = /خارج\s*الخدمة|خارج\s*خدمة|إجازة|اجازة/i.test(sourceText) || sourceText.includes(cfg.outRoleId) || sourceText.includes(cfg.outRoleMention);
+      let finalRating = explicitOutOfService ? cfg.outRoleMention : calculateScenarioFinalGrade(baseGrade, responsibilityGrade, badResponsibilityCount);
+      finalRating = applyMemberStatus(finalRating, userId, memberStatuses, cfg.outRoleMention);
+      const isOutOfService = explicitOutOfService || finalRating === cfg.outRoleMention;
       const rawKey = userId || data.mention;
       idTracker[rawKey] = (idTracker[rawKey] || 0) + 1;
       processedCount++;
@@ -2449,7 +2487,7 @@ document.addEventListener('DOMContentLoaded', function () {
     };
   }
 
-  function processModuleData(input, authorName, moduleKey, responsibilityEvaluations = {}) {
+  function processModuleData(input, authorName, moduleKey, responsibilityEvaluations = {}, memberStatuses = { new: new Set(), out: new Set() }) {
     const cfg = moduleDefs[moduleKey] || moduleDefs.events;
     lastDuplicateEntries = findDuplicateModuleEntries(input, moduleKey);
     input = deduplicateModuleInput(input, moduleKey);
@@ -2458,27 +2496,27 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (moduleKey === 'events') {
-      return buildEventSectionResult(input, authorName, cfg, getEventMemberRanks(), responsibilityEvaluations);
+      return buildEventSectionResult(input, authorName, cfg, getEventMemberRanks(), responsibilityEvaluations, memberStatuses);
     }
 
     if (moduleKey === 'scenario') {
-      return buildScenarioSectionResult(input, authorName, cfg, getScenarioMemberRanks(), responsibilityEvaluations);
+      return buildScenarioSectionResult(input, authorName, cfg, getScenarioMemberRanks(), responsibilityEvaluations, memberStatuses);
     }
 
     if (moduleKey === 'raqabh') {
-      return buildRaqabhSectionResult(input, authorName, cfg, getRaqabhMemberRanks());
+      return buildRaqabhSectionResult(input, authorName, cfg, getRaqabhMemberRanks(), memberStatuses);
     }
 
     if (moduleKey === 'ban') {
-      return buildBanSectionResult(input, authorName, cfg, getBanMemberRanks());
+      return buildBanSectionResult(input, authorName, cfg, getBanMemberRanks(), memberStatuses);
     }
 
     if (moduleKey === 'interviews') {
-      return buildInterviewsSectionResult(input, authorName, cfg, getInterviewsMemberRanks());
+      return buildInterviewsSectionResult(input, authorName, cfg, getInterviewsMemberRanks(), memberStatuses);
     }
 
     if (moduleKey === 'roles') {
-      return buildRolesOfficialSectionResult(input, authorName, cfg, getRolesOfficialMemberRanks());
+      return buildRolesOfficialSectionResult(input, authorName, cfg, getRolesOfficialMemberRanks(), memberStatuses);
     }
 
     if (moduleKey === 'raqabh') {
@@ -2738,6 +2776,8 @@ const source = data.userMention || data.userId || data.username || data.discordI
     const duplicateAlert = inventoryPanel ? inventoryPanel.querySelector('.stats-duplicates') : moduleContent.querySelector('.stats-duplicates');
     const eventsTotal = inventoryPanel ? inventoryPanel.querySelector('.stats-events-total') : null;
     const membersField = moduleContent.querySelector('.module-members');
+    const eventMemberFields = moduleKey === 'events' ? moduleContent.querySelectorAll('.module-member-list') : [];
+    const memberStatusFields = moduleContent.querySelectorAll('.module-members-new, .module-members-out');
     const responsibilitiesField = moduleContent.querySelector('.module-responsibilities');
 
     if (!input || !output || !report || !authorInput || !totalCount || !duplicateAlert) {
@@ -2747,7 +2787,13 @@ const source = data.userMention || data.userId || data.username || data.discordI
     const processCurrentModule = () => {
       let result;
       try {
-        result = processModuleData(input.value, authorInput.value.trim(), moduleKey, getResponsibilityEvaluations());
+        result = processModuleData(
+          input.value,
+          authorInput.value.trim(),
+          moduleKey,
+          getResponsibilityEvaluations(),
+          getModuleMemberStatuses()
+        );
       } catch (error) {
         console.error('Module processing failed:', error);
         output.value = `تعذر تجهيز المخرجات: ${error.message || 'خطأ غير معروف'}`;
@@ -2863,6 +2909,8 @@ const source = data.userMention || data.userId || data.username || data.discordI
 
     authorInput.addEventListener('input', processCurrentModule);
     membersField?.addEventListener('input', processCurrentModule);
+    eventMemberFields.forEach((field) => field.addEventListener('input', processCurrentModule));
+    memberStatusFields.forEach((field) => field.addEventListener('input', processCurrentModule));
     responsibilitiesField?.addEventListener('input', processCurrentModule);
 
     const processBtn = moduleContent.querySelector('.action-process');
@@ -2925,7 +2973,10 @@ const source = data.userMention || data.userId || data.username || data.discordI
       moduleContent.querySelectorAll(`[data-sync-group="${moduleKey}-shared"]`).forEach((field) => {
         field.value = '';
       });
-      if (membersField) membersField.value = '';
+      moduleContent.querySelectorAll('.module-member-list, .module-members-new, .module-members-out').forEach((field) => {
+        field.value = '';
+        localStorage.removeItem(`draft_${field.id}`);
+      });
       if (responsibilitiesField) responsibilitiesField.value = '';
     });
 
@@ -3109,8 +3160,36 @@ const source = data.userMention || data.userId || data.username || data.discordI
           </div>
 
           <div class="module-card full-width">
-            <label>أعضاء القسم ورتبهم من الهيدرات</label>
-            <textarea id="${safeKey}-members" class="module-members" placeholder="➜ <@&ROLE_ID>\n- <@USER_ID>"></textarea>
+            <label>${safeKey === 'events' ? 'قوائم أعضاء قسم الإيفنت' : 'أعضاء القسم ورتبهم من الهيدرات'}</label>
+            ${safeKey === 'events'
+              ? `<div class="event-member-lists">
+                  <div class="event-member-list-group">
+                    <label>الأعضاء الأساسيون والرتب</label>
+                    <textarea id="events-members" class="module-members module-member-list" placeholder="➜ <@&ROLE_ID>\n- <@USER_ID>"></textarea>
+                  </div>
+                  <div class="event-member-list-group">
+                    <label>الأعضاء الجدد</label>
+                    <textarea id="events-new-members" class="module-members-new" placeholder="- <@USER_ID>"></textarea>
+                  </div>
+                  <div class="event-member-list-group">
+                    <label>خارج الخدمة</label>
+                    <textarea id="events-out-members" class="module-members-out" placeholder="- <@USER_ID>"></textarea>
+                  </div>
+                </div>`
+              : `<div class="department-member-lists">
+                  <div class="event-member-list-group">
+                    <label>الأعضاء الأساسيون والرتب</label>
+                    <textarea id="${safeKey}-members" class="module-members module-member-list" placeholder="➜ <@&ROLE_ID>\n- <@USER_ID>"></textarea>
+                  </div>
+                  <div class="event-member-list-group">
+                    <label>الأعضاء الجدد</label>
+                    <textarea id="${safeKey}-new-members" class="module-members-new" placeholder="- <@USER_ID>"></textarea>
+                  </div>
+                  <div class="event-member-list-group">
+                    <label>خارج الخدمة</label>
+                    <textarea id="${safeKey}-out-members" class="module-members-out" placeholder="- <@USER_ID>"></textarea>
+                  </div>
+                </div>`}
           </div>
 
           <div class="module-card full-width">
