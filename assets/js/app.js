@@ -871,6 +871,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const identityPattern = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
       ? /(?=منشن\s*الشخص\s*:)/g
+      : moduleKey === 'interviews'
+        ? /={3,}|(?=منشن\s*الشخص\s*:)/g
       : /(?=الايدي\s*:)/g;
     const blocks = source.split(identityPattern).filter((block) => block.trim());
     const seen = new Set();
@@ -879,8 +881,12 @@ document.addEventListener('DOMContentLoaded', function () {
     blocks.forEach((block) => {
       const identityLine = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
         ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i)
-        : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
-      const identity = identityLine ? extractDiscordId(identityLine[1]) : '';
+        : moduleKey === 'interviews'
+          ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i) || block.match(/الايدي\s*:\s*([^\r\n]+)/i)
+          : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
+      const identity = identityLine
+        ? extractDiscordId(identityLine[1]) || (moduleKey === 'interviews' ? identityLine[1].replace(/\D/g, '') : '')
+        : '';
       if (!identity || seen.has(identity)) return;
       seen.add(identity);
       kept.push(block.trim());
@@ -893,14 +899,20 @@ document.addEventListener('DOMContentLoaded', function () {
     const source = String(input || '');
     const identityPattern = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
       ? /(?=منشن\s*الشخص\s*:)/g
+      : moduleKey === 'interviews'
+        ? /={3,}|(?=منشن\s*الشخص\s*:)/g
       : /(?=الايدي\s*:)/g;
     const counts = {};
 
     source.split(identityPattern).forEach((block) => {
       const identityLine = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
         ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i)
-        : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
-      const identity = identityLine ? extractDiscordId(identityLine[1]) : '';
+        : moduleKey === 'interviews'
+          ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i) || block.match(/الايدي\s*:\s*([^\r\n]+)/i)
+          : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
+      const identity = identityLine
+        ? extractDiscordId(identityLine[1]) || (moduleKey === 'interviews' ? identityLine[1].replace(/\D/g, '') : '')
+        : '';
       if (identity) counts[identity] = (counts[identity] || 0) + 1;
     });
 
@@ -1222,7 +1234,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let bandTicketTotal = 0;
     let unbanTotal = 0;
 
-    String(input || '').replace(/[\u200B-\u200D\uFEFF\u200F]/g, '').split(/\*\*==============\*\*|(?=منشن\s*الشخص\s*:)/).forEach((block) => {
+    String(input || '').replace(/[\u200B-\u200D\uFEFF\u200F]/g, '').split(/\*\*==============\*\*|={3,}|(?=منشن\s*الشخص\s*:)/).forEach((block) => {
       if (!block.trim()) return;
       const data = { mention: '', id: '', rank: '', tickets: 0, temporary: 0, permanent: 0, unban: 0, hours: 0, attendance: '', points: '', rawEval: '', responsibilityEval: '', finalEval: '' };
       block.split(/\r?\n/).forEach((line) => {
@@ -1245,7 +1257,7 @@ document.addEventListener('DOMContentLoaded', function () {
         else if (/^التقييم|^التقيم/.test(key)) data.rawEval = value;
       });
 
-      const identity = extractDiscordId(data.mention) || extractDiscordId(data.id);
+      const identity = extractDiscordId(data.mention) || extractDiscordId(data.id) || String(data.id || '').replace(/\D/g, '');
       if (!identity) return;
       const mention = preserveScenarioMention(data.mention, identity);
       const rankInfo = banRankInfo(memberRanks[identity] || '');

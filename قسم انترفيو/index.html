@@ -163,6 +163,16 @@
     </div>
 
     <div class="box full-width-box">
+      <label>السبب</label>
+      <textarea id="reasonsData" readonly></textarea>
+    </div>
+
+    <div class="box full-width-box">
+      <label>الجرد النهائي</label>
+      <textarea id="finalInventoryData" readonly></textarea>
+    </div>
+
+    <div class="box full-width-box">
       <div class="input-author">
         <label style="margin: 0; min-width: 140px;">منشئ التقرير (اسمك/المنشن):</label>
         <input type="text" id="authorName" placeholder="أدخل اسمك..." oninput="processData()">
@@ -244,12 +254,16 @@
 
     function processData() {
       const input = document.getElementById('inputData').value;
+      const reasonsElem = document.getElementById('reasonsData');
+      const finalInventoryElem = document.getElementById('finalInventoryData');
       const totalCountElem = document.getElementById('totalCount');
       const duplicateAlertElem = document.getElementById('duplicateAlert');
       const authorName = document.getElementById('authorName').value.trim();
 
       if (!input.trim()) {
         document.getElementById('outputData').value = '';
+        reasonsElem.value = '';
+        finalInventoryElem.value = '';
         document.getElementById('reportData').value = '';
         totalCountElem.textContent = 'إجمالي العدد: 0';
         duplicateAlertElem.style.display = 'none';
@@ -258,6 +272,8 @@
 
       const lineSeparator = '`-----------------------------------------------------`';
       let result = `${lineSeparator}\n`;
+      let finalInventory = `${lineSeparator}\n`;
+      let reasons = '';
       let processedCount = 0;
       let idTracker = {};
 
@@ -267,7 +283,7 @@
       let countActive = 0;
 
       // التقسيم يكون على سطور الفاصل فقط حتى تبقى حقول الأيدي والمنشن داخل نفس السجل
-      const entries = input.split(/\r?\n\s*=+\s*\r?\n/g);
+      const entries = input.split(/\r?\n\s*\*{0,2}=+\*{0,2}\s*\r?\n|(?=منشن\s*الشخص\s*:)/g);
 
       entries.forEach((entry) => {
         if (!entry.replace(/=/g, '').trim()) return;
@@ -321,10 +337,14 @@
 
           let formattedMention = formatUserMention(sourceMention);
           result += `${formattedMention}\nالتقييم : ${finalRating}\nالرتبة الادارية : ${cleanRank}\n${lineSeparator}\n`;
+          finalInventory += `${formattedMention}\nالتقييم : ${finalRating}\nالرتبة الادارية : ${cleanRank}\n${lineSeparator}\n`;
+          reasons += `${formattedMention}\nالتقييم النهائي: ${finalRating}\nالرتبة الادارية: ${cleanRank}\n\n--------------------\n\n`;
         }
       });
 
       document.getElementById('outputData').value = result;
+      reasonsElem.value = reasons;
+      finalInventoryElem.value = finalInventory;
       totalCountElem.textContent = `إجمالي العدد: ${processedCount}`;
 
       const weeklyReport = `** كم العدد حالي بالقسم: ${processedCount}\n\n` +
@@ -356,6 +376,8 @@
     function clearAll() {
       document.getElementById('inputData').value = '';
       document.getElementById('outputData').value = '';
+      document.getElementById('reasonsData').value = '';
+      document.getElementById('finalInventoryData').value = '';
       document.getElementById('reportData').value = '';
       document.getElementById('authorName').value = '';
       document.getElementById('totalCount').textContent = 'إجمالي العدد: 0';
