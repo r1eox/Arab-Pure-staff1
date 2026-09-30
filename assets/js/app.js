@@ -865,6 +865,34 @@ document.addEventListener('DOMContentLoaded', function () {
     return match ? Number(match[0]) : 0;
   }
 
+  const inputFieldLabels = [
+    'منشن الشخص', 'الايدي', 'الرتبة الادارية', 'الرتبة ادارية', 'عدد الفعاليات',
+    'التقييم النهائي', 'التقيم النهائي', 'التقييم بالمسؤوليات', 'التقيم بالمسؤوليات',
+    'تقييم المسؤوليات النهائي', 'تقيم المسؤوليات النهائي', 'تقييم المسؤوليات', 'تقيم المسؤوليات',
+    'التقييم المسؤوليات', 'تقييم المسؤوليات', 'التقييم', 'التقيم', 'مسؤول الجرد',
+    'مشرف المسؤوليات', 'مراقبة السيناريو المشترك', 'اجمالي نقاط السيناريوهات',
+    'مجموع الصور للسرقات', 'مراقبة المجوهرات', 'مراقبة سيناريوهات البنك المركزي', 'مراقبة سرقة المنزل',
+    'مراقبة 300 صورة', 'مراقبة 400 صورة', 'ساعات مراقب السيناريوهات', 'ساعات مراقب سيناريوهات',
+    'ساعات مراقب سرقات', 'مجموع الساعات', 'هل أكمل 4 ساعات', 'أكمل 4 ساعات',
+    'عدد ساعات مراقب الملكية', 'ساعات مراقب الملكية', 'مراقب الملكية', 'عدد ساعات الملكية',
+    'ساعات الملكية', 'عدد ساعات مراقب خصوصي', 'ساعات مراقب خصوصي', 'مراقب خصوصي',
+    'عدد ساعات مراقب عام', 'ساعات مراقب عام', 'مراقب عام', 'تكتات الباند', 'قبول التكتات',
+    'باند مؤقت', 'الباند النهائي', 'فك باند', 'دفتر الحضور', 'عدد الساعات', 'الساعات',
+    'حضور الجرد', 'أكمل الجرد', 'النقاط', 'القبول', 'الاستقبال', 'مرفوض', 'رفض',
+    'توظيف ميداني', 'تغيير الاسم', 'إعطاء الرتب', 'اعطاء الرتب', 'إجمالي التكتات',
+    'اجمالي التكتات', 'إجمالي البوينتات', 'اجمالي البوينتات', 'المعدل', 'مراقبة اللوقات',
+    'تدقيق الصور', 'الملاحظات', 'الاجازات', 'التحذيرات'
+  ].sort((left, right) => right.length - left.length);
+
+  const inputFieldLabelPattern = new RegExp(
+    `^([ \\t]*)(${inputFieldLabels.map((label) => label.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|')})([ \\t]+)(?![ \\t]*:)(.*)$`,
+    'gm'
+  );
+
+  function normalizeMissingInputColons(input) {
+    return String(input || '').replace(inputFieldLabelPattern, '$1$2: $4');
+  }
+
   function deduplicateModuleInput(input, moduleKey) {
     const source = String(input || '');
     if (!source.trim()) return source;
@@ -2501,6 +2529,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function processModuleData(input, authorName, moduleKey, responsibilityEvaluations = {}, memberStatuses = { new: new Set(), out: new Set() }) {
     const cfg = moduleDefs[moduleKey] || moduleDefs.events;
+    input = normalizeMissingInputColons(input);
     lastDuplicateEntries = findDuplicateModuleEntries(input, moduleKey);
     input = deduplicateModuleInput(input, moduleKey);
     if (!input.trim()) {
@@ -2887,7 +2916,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
 
         const transferOutput = moduleContent.querySelector('.transfer-output');
         if (transferOutput) {
-          transferOutput.value = buildDepartmentLeadersOutput(deduplicateModuleInput(input.value, moduleKey), moduleKey);
+          transferOutput.value = buildDepartmentLeadersOutput(deduplicateModuleInput(normalizeMissingInputColons(input.value), moduleKey), moduleKey);
         }
       }
 
