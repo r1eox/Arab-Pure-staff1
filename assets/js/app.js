@@ -890,7 +890,11 @@ document.addEventListener('DOMContentLoaded', function () {
   );
 
   function normalizeMissingInputColons(input) {
-    return String(input || '').replace(inputFieldLabelPattern, '$1$2: $4');
+    return String(input || '').split(/\r?\n/).map((line) => {
+      const separator = line.indexOf(':');
+      if (separator >= 0 && inputFieldLabels.includes(line.slice(0, separator).trim())) return line;
+      return line.replace(inputFieldLabelPattern, '$1$2: $4');
+    }).join('\n');
   }
 
   function deduplicateModuleInput(input, moduleKey) {
