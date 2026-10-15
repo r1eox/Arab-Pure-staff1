@@ -2400,11 +2400,11 @@ document.addEventListener('DOMContentLoaded', function () {
           else if (/^الايدي/.test(key)) id = rawValue;
           else if (moduleKey === 'raqabh' && /مجموع الساعات/.test(key)) explicitTotalMinutes = parseScenarioHours(rawValue);
           else if (moduleKey === 'raqabh' && /ساعات الملكية|مراقب الملكية|مراقب خصوصي|مراقب عام/.test(key)) detailedMinutes += parseScenarioHours(rawValue);
-          else if (moduleKey === 'ban' && /تكتات الباند|قبول التكتات/.test(key)) value = parseScenarioNumber(rawValue);
+          else if (moduleKey === 'ban' && /^النقاط/.test(key)) value = parseScenarioNumber(rawValue);
         });
         if (moduleKey === 'raqabh') value = (explicitTotalMinutes || detailedMinutes) / 60;
         const identity = extractDiscordId(mention) || extractDiscordId(id);
-        addLeader(identity, preserveScenarioMention(mention || id, identity), value, moduleKey === 'raqabh' ? 'مجموع الساعات' : 'تكتات الباند');
+        addLeader(identity, preserveScenarioMention(mention || id, identity), value, moduleKey === 'raqabh' ? 'مجموع الساعات' : 'النقاط');
       });
     }
 
@@ -2920,7 +2920,8 @@ const source = data.userMention || data.userId || data.username || data.discordI
 
         const transferOutput = moduleContent.querySelector('.transfer-output');
         if (transferOutput) {
-          transferOutput.value = buildDepartmentLeadersOutput(deduplicateModuleInput(normalizeMissingInputColons(input.value), moduleKey), moduleKey);
+          const leaderSource = moduleKey === 'ban' ? result.output : deduplicateModuleInput(normalizeMissingInputColons(input.value), moduleKey);
+          transferOutput.value = buildDepartmentLeadersOutput(leaderSource, moduleKey);
         }
       }
 
