@@ -873,7 +873,8 @@ document.addEventListener('DOMContentLoaded', function () {
     'مشرف المسؤوليات', 'مراقبة السيناريو المشترك', 'اجمالي نقاط السيناريوهات',
     'مجموع الصور للسرقات', 'مراقبة المجوهرات', 'مراقبة سيناريوهات البنك المركزي', 'مراقبة سرقة المنزل',
     'مراقبة 300 صورة', 'مراقبة 400 صورة', 'ساعات مراقب السيناريوهات', 'ساعات مراقب سيناريوهات',
-    'ساعات مراقب سرقات', 'مجموع الساعات', 'هل أكمل 4 ساعات', 'أكمل 4 ساعات',
+    'ساعات مراقب سرقات', 'مجموع الساعات', 'هل أكمل 4 ساعات بكل روم؟', 'هل أكمل 4 ساعات بكل روم',
+    'هل أكمل 4 ساعات بـ كل روم ؟', 'أكمل 4 ساعات بكل روم؟', 'هل أكمل 4 ساعات', 'أكمل 4 ساعات',
     'عدد ساعات مراقب الملكية', 'ساعات مراقب الملكية', 'مراقب الملكية', 'عدد ساعات الملكية',
     'ساعات الملكية', 'عدد ساعات مراقب خصوصي', 'ساعات مراقب خصوصي', 'مراقب خصوصي',
     'عدد ساعات مراقب عام', 'ساعات مراقب عام', 'مراقب عام', 'تكتات الباند', 'قبول التكتات',
@@ -904,7 +905,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const identityPattern = moduleKey === 'scenario' || moduleKey === 'ban'
       ? /(?=منشن\s*الشخص\s*:)/g
       : moduleKey === 'raqabh'
-        ? /(?=منشن\s*الشخص\s*:|الايدي\s*:)/g
+        ? /={3,}|(?=منشن\s*الشخص\s*:)/g
         : moduleKey === 'interviews'
           ? /={3,}|(?=منشن\s*الشخص\s*:)/g
           : /(?=الايدي\s*:)/g;
@@ -916,7 +917,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const identityLine = moduleKey === 'scenario' || moduleKey === 'ban'
         ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i)
         : moduleKey === 'raqabh'
-          ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i) || block.match(/الايدي\s*:\s*([^\r\n]+)/i)
+          ? block.match(/منشن\s*الشخص[ \t]*:[ \t]*([^\r\n]+)/i) || block.match(/الايدي[ \t]*:[ \t]*([^\r\n]+)/i)
           : moduleKey === 'interviews'
             ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i) || block.match(/الايدي\s*:\s*([^\r\n]+)/i)
             : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
@@ -936,7 +937,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const identityPattern = moduleKey === 'scenario' || moduleKey === 'ban'
       ? /(?=منشن\s*الشخص\s*:)/g
       : moduleKey === 'raqabh'
-        ? /(?=منشن\s*الشخص\s*:|الايدي\s*:)/g
+        ? /={3,}|(?=منشن\s*الشخص\s*:)/g
         : moduleKey === 'interviews'
           ? /={3,}|(?=منشن\s*الشخص\s*:)/g
           : /(?=الايدي\s*:)/g;
@@ -946,7 +947,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const identityLine = moduleKey === 'scenario' || moduleKey === 'ban'
         ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i)
         : moduleKey === 'raqabh'
-          ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i) || block.match(/الايدي\s*:\s*([^\r\n]+)/i)
+          ? block.match(/منشن\s*الشخص[ \t]*:[ \t]*([^\r\n]+)/i) || block.match(/الايدي[ \t]*:[ \t]*([^\r\n]+)/i)
           : moduleKey === 'interviews'
             ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i) || block.match(/الايدي\s*:\s*([^\r\n]+)/i)
             : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
@@ -1131,7 +1132,11 @@ document.addEventListener('DOMContentLoaded', function () {
     let active = 0;
     const responsibilityMap = getRaqabhResponsibilityMap(document.querySelector('.module-responsibilities')?.value || '');
 
-    String(input || '').split(/(?=منشن\s*الشخص\s*:|الايدي\s*:)/).forEach((block) => {
+    String(input || '').split(/={3,}|(?=منشن\s*الشخص\s*:)/).forEach((rawBlock) => {
+      const subBlocks = /منشن\s*الشخص/.test(rawBlock)
+        ? [rawBlock]
+        : String(rawBlock).split(/(?=الايدي\s*:)/);
+      subBlocks.forEach((block) => {
       if (!block.trim()) return;
       const data = { mention: '', id: '', rank: '', ownership: '', private: '', general: '', totalHours: '', completedRooms: '', rawEval: '', finalEval: '' };
       block.split(/\r?\n/).forEach((line) => {
@@ -1189,11 +1194,14 @@ document.addEventListener('DOMContentLoaded', function () {
       const cleanRank = cleanAndStandardizeRank(data.rank);
       const requiredRoomsText = requiredRooms.length ? requiredRooms.map((room) => room.name).join('، ') : 'لا توجد رومز مطلوبة لهذه الرتبة';
       reasonsOutput += `${mention}\nنقاط الساعات: ${hoursPoints}\nرومات هذه الرتبة: ${requiredRoomsText}\nبونص إكمال 4 ساعات بالرومات المطلوبة: ${roomsBonus}\nنقاط المسؤوليات: ${responsibilityPoints}\nالتقييم: ${evaluation}\nتقييم المسؤوليات: ${responsibilityGrade}\nالتقييم النهائي: ${finalEvaluation}\n\n`;
-      if (rankInfo.kind === 'assistant') output += `الايدي : ${data.id}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات مراقب الملكية : ${data.ownership}\nعدد ساعات مراقب خصوصي : ${data.private}\nعدد ساعات مراقب عام : ${data.general}\nمجموع البوينتات : ${totalPoints}\nالتقييم : ${evaluation}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
-      else if (rankInfo.kind === 'supervisor') output += `الايدي : ${data.id}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات مراقب الملكية : ${data.ownership}\nعدد ساعات مراقب خصوصي : ${data.private}\nمجموع البوينتات : ${totalPoints}\nالتقييم : ${evaluation}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
-      else if (rankInfo.kind === 'leader') output += `الايدي : ${data.id}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات الملكية : ${data.ownership}\nاجمالي البوينتات : ${totalPoints}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
-      else output += `الايدي : ${data.id}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات الملكية : ${data.ownership}\nاجمالي البوينتات : ${totalPoints}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      const isFullSurvey = /مراقب\s*(?:الملكية|خصوصي|عام)|مجموع الساعات|أكمل 4 ساعات/.test(block);
+      if (rankInfo.kind === 'assistant') output += `الايدي : ${data.id || mention}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات مراقب الملكية : ${data.ownership}\nعدد ساعات مراقب خصوصي : ${data.private}\nعدد ساعات مراقب عام : ${data.general}\nمجموع البوينتات : ${totalPoints}\nالتقييم : ${evaluation}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      else if (rankInfo.kind === 'supervisor') output += `الايدي : ${data.id || mention}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات مراقب الملكية : ${data.ownership}\nعدد ساعات مراقب خصوصي : ${data.private}\nمجموع البوينتات : ${totalPoints}\nالتقييم : ${evaluation}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      else if (rankInfo.kind === 'leader') output += `الايدي : ${data.id || mention}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات الملكية : ${data.ownership}\nاجمالي البوينتات : ${totalPoints}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      else if (isFullSurvey) output += `منشن الشخص : ${mention}\nالايدي : ${data.id}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات مراقب الملكية : ${data.ownership}\nعدد ساعات مراقب خصوصي : ${data.private}\nعدد ساعات مراقب عام : ${data.general}\nمجموع الساعات : ${data.totalHours || (totalMinutes ? `${Math.floor(totalMinutes / 60)}س ${totalMinutes % 60}د` : '')}\nهل أكمل 4 ساعات بكل روم؟ : ${data.completedRooms}\nاجمالي البوينتات : ${totalPoints}\nالتقييم : ${evaluation}\nتقييم المسؤوليات : ${responsibilityGrade}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
+      else output += `الايدي : ${data.id || mention}\nالرتبة الادارية : ${cleanRank}\nعدد ساعات الملكية : ${data.ownership}\nاجمالي البوينتات : ${totalPoints}\nالتقيم النهائي : ${finalEvaluation}\n${separator}\n`;
       finalInventory += `${mention}\nالتقييم : ${finalEvaluation}\nالرتبة الادارية : ${cleanRank}\n${finalSeparator}\n`;
+      });
     });
 
     return {
