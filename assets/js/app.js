@@ -901,21 +901,25 @@ document.addEventListener('DOMContentLoaded', function () {
     const source = String(input || '');
     if (!source.trim()) return source;
 
-    const identityPattern = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
+    const identityPattern = moduleKey === 'scenario' || moduleKey === 'ban'
       ? /(?=منشن\s*الشخص\s*:)/g
-      : moduleKey === 'interviews'
-        ? /={3,}|(?=منشن\s*الشخص\s*:)/g
-      : /(?=الايدي\s*:)/g;
+      : moduleKey === 'raqabh'
+        ? /(?=منشن\s*الشخص\s*:|الايدي\s*:)/g
+        : moduleKey === 'interviews'
+          ? /={3,}|(?=منشن\s*الشخص\s*:)/g
+          : /(?=الايدي\s*:)/g;
     const blocks = source.split(identityPattern).filter((block) => block.trim());
     const seen = new Set();
     const kept = [];
 
     blocks.forEach((block) => {
-      const identityLine = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
+      const identityLine = moduleKey === 'scenario' || moduleKey === 'ban'
         ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i)
-        : moduleKey === 'interviews'
+        : moduleKey === 'raqabh'
           ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i) || block.match(/الايدي\s*:\s*([^\r\n]+)/i)
-          : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
+          : moduleKey === 'interviews'
+            ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i) || block.match(/الايدي\s*:\s*([^\r\n]+)/i)
+            : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
       const identity = identityLine
         ? extractDiscordId(identityLine[1]) || (moduleKey === 'interviews' ? identityLine[1].replace(/\D/g, '') : '')
         : '';
@@ -929,19 +933,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function findDuplicateModuleEntries(input, moduleKey) {
     const source = String(input || '');
-    const identityPattern = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
+    const identityPattern = moduleKey === 'scenario' || moduleKey === 'ban'
       ? /(?=منشن\s*الشخص\s*:)/g
-      : moduleKey === 'interviews'
-        ? /={3,}|(?=منشن\s*الشخص\s*:)/g
-      : /(?=الايدي\s*:)/g;
+      : moduleKey === 'raqabh'
+        ? /(?=منشن\s*الشخص\s*:|الايدي\s*:)/g
+        : moduleKey === 'interviews'
+          ? /={3,}|(?=منشن\s*الشخص\s*:)/g
+          : /(?=الايدي\s*:)/g;
     const counts = {};
 
     source.split(identityPattern).forEach((block) => {
-      const identityLine = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban'
+      const identityLine = moduleKey === 'scenario' || moduleKey === 'ban'
         ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i)
-        : moduleKey === 'interviews'
+        : moduleKey === 'raqabh'
           ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i) || block.match(/الايدي\s*:\s*([^\r\n]+)/i)
-          : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
+          : moduleKey === 'interviews'
+            ? block.match(/منشن\s*الشخص\s*:\s*([^\r\n]+)/i) || block.match(/الايدي\s*:\s*([^\r\n]+)/i)
+            : block.match(/الايدي\s*:\s*([^\r\n]+)/i);
       const identity = identityLine
         ? extractDiscordId(identityLine[1]) || (moduleKey === 'interviews' ? identityLine[1].replace(/\D/g, '') : '')
         : '';
