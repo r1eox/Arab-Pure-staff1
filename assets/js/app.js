@@ -3065,35 +3065,43 @@ const source = data.userMention || data.userId || data.username || data.discordI
     return null;
   }
 
-  function parseBalanceMembers(rawText) {
+  function parseBalanceList(rawText) {
     const members = new Map();
     String(rawText || '').split(/\r?\n/).forEach((line) => {
       const member = extractBalanceIdentity(line);
-      if (member && !members.has(member.key)) members.set(member.key, member.display);
-    });
-    return members;
-  }
-
-  function parseBalanceAudited(rawText) {
-    const members = new Set();
-    String(rawText || '').split(/\r?\n/).forEach((line) => {
-      const member = extractBalanceIdentity(line);
-      if (member) members.add(member.key);
+      if (!member) return;
+      const current = members.get(member.key);
+      if (current) current.count += 1;
+      else members.set(member.key, { display: member.display, count: 1 });
     });
     return members;
   }
 
   function compareBalanceLists(balancePanel) {
-    const allMembers = parseBalanceMembers(balancePanel.querySelector('.balance-all-members')?.value || '');
-    const auditedMembers = parseBalanceAudited(balancePanel.querySelector('.balance-audited-members')?.value || '');
+    const allMembers = parseBalanceList(balancePanel.querySelector('.balance-all-members')?.value || '');
+    const auditedMembers = parseBalanceList(balancePanel.querySelector('.balance-audited-members')?.value || '');
     const missingMembers = [...allMembers.entries()]
       .filter(([key]) => !auditedMembers.has(key))
-      .map(([, display]) => display);
+      .map(([, member]) => member.display);
+    const duplicates = [
+      ...[...allMembers.values()]
+        .filter((member) => member.count > 1)
+        .map((member) => `- ${member.display} (تكرر ${member.count} مرات في قائمة الأعضاء الكاملة)`),
+      ...[...auditedMembers.values()]
+        .filter((member) => member.count > 1)
+        .map((member) => `- ${member.display} (تكرر ${member.count} مرات في استبيان الجرد النهائي)`)
+    ];
+    const duplicateCard = balancePanel.querySelector('.balance-duplicate-card');
+    const duplicateAlert = balancePanel.querySelector('.balance-duplicate-alert');
 
     balancePanel.querySelector('.balance-missing-members').value = missingMembers.join('\n');
     balancePanel.querySelector('.balance-total-count').textContent = `عدد الأعضاء الفعليين: ${allMembers.size}`;
     balancePanel.querySelector('.balance-audited-count').textContent = `الموجودين بالجرد: ${allMembers.size - missingMembers.length}`;
     balancePanel.querySelector('.balance-missing-count').textContent = `إجمالي الغير متواجدين: ${missingMembers.length}`;
+    duplicateAlert.textContent = duplicates.length
+      ? `⚠️ تنبيه: يوجد أعضاء مكرّرون:\n${duplicates.join('\n')}`
+      : '';
+    duplicateCard.style.display = duplicates.length ? 'block' : 'none';
   }
 
   function renderBalanceModule() {
@@ -3114,6 +3122,10 @@ const source = data.userMention || data.userId || data.username || data.discordI
             <textarea id="balance-audited-members" class="balance-audited-members" placeholder="الصق الجرد المنسق هنا..."></textarea>
             <div class="stats-bar"><div class="stats-count balance-audited-count">الموجودين بالجرد: 0</div></div>
           </div>
+        </div>
+        <div class="module-card balance-duplicate-card" style="display: none;" role="status" aria-live="polite">
+          <label>تنبيه التكرار</label>
+          <div class="balance-duplicate-alert"></div>
         </div>
         <div class="module-card balance-card balance-missing-card">
           <label>الأشخاص غير المتواجدين</label>

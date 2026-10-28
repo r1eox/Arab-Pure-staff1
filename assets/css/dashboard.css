@@ -104,6 +104,17 @@ button, input, textarea {
   margin-top: 16px;
 }
 
+.balance-duplicate-card {
+  margin-top: 16px;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.balance-duplicate-alert {
+  color: #fca5a5;
+  font-weight: 700;
+  white-space: pre-line;
+}
+
 .balance-missing-members {
   min-height: 170px !important;
   border-color: rgba(248, 113, 113, 0.45) !important;
