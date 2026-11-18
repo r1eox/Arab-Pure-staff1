@@ -756,6 +756,24 @@ body.menu-open .mobile-backdrop {
   margin-top: 2px;
 }
 
+.event-winners-card {
+  margin-top: 16px;
+  border-color: color-mix(in srgb, var(--module-accent) 42%, rgba(148, 163, 184, 0.2));
+}
+
+.event-winners-description {
+  margin: 0;
+  color: #aab8ca;
+  line-height: 1.7;
+}
+
+.event-winners-output {
+  min-height: 420px !important;
+  direction: rtl !important;
+  text-align: right;
+  line-height: 1.8;
+}
+
 .toast {
   position: fixed;
   left: 50%;

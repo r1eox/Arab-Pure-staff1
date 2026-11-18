@@ -2338,7 +2338,7 @@ document.addEventListener('DOMContentLoaded', function () {
     };
   }
 
-  function buildEventLeadersOutput(input) {
+  function getEventLeaders(input) {
     const leaders = [];
     String(input || '').split(/={3,}/).forEach((block) => {
       if (!block.trim()) return;
@@ -2364,9 +2364,53 @@ document.addEventListener('DOMContentLoaded', function () {
 
     return [...uniqueLeaders.values()]
       .sort((left, right) => right.events - left.events)
+      .map((leader) => ({ ...leader, mention: leader.mention.trim() }));
+  }
+
+  function buildEventLeadersOutput(input) {
+    return getEventLeaders(input)
       .slice(0, 5)
       .map((leader, index) => `${index + 1}. ${leader.mention}\nعدد الفعاليات: ${leader.events}`)
       .join('\n\n') || 'لا يوجد متصدرين';
+  }
+
+  function buildEventWinnersAnnouncement(input) {
+    const leaders = getEventLeaders(input).slice(0, 3);
+    if (!leaders.length) return '';
+
+    const positions = ['الاول', 'الثاني', 'الثالث'];
+    const winnerMentions = positions.map((position, index) => {
+      const mention = leaders[index]?.mention || 'لا يوجد';
+      return `** المركز ${position} :\n\n|| ${mention} ||`;
+    });
+
+    return `\`السلام عليكم ورحمة الله وبركاته
+اسعد الله اوقاتكم بكل خير ..\`
+
+${winnerMentions[0]}
+
+والحاصل
+- خصم 50% من مهام الترقية لمدة 24 ساعة ( في حال كان تصنيف A يتم خصم 3 ايام )
+- ترقية في الادارة
+- رتبة خاصة في الدس ( منظم الاسبوع )
+
+${winnerMentions[1]}
+
+- خصم 25% من مهام الترقية لمدة 24 ساعة ( في حال كان تصنيف A يتم خصم يومين )
+- رتبة خاصة في دس الاقسام ( منظم الاسبوع )
+- ترقية في الادارة
+
+${winnerMentions[2]}
+
+- خصم 25% من مهام الترقية لمدة 24 ساعة ( في حال كان تصنيف A يتم خصم يوم واحد )
+- رتبة خاصة في دس الاقسام ( منظم الاسبوع )
+- ترقية في الادارة
+
+ملاحظة : الفعاليه مستمرة كل اسبوع فائز + الترقية ما تشمل من رتبة <@&1133403492845899837> و اعلى .
+
+- لاستلام الترقية يرجى فتح تذكرة شكوى ضد إداري.
+
+||@everyone||`;
   }
 
   function buildDepartmentLeadersOutput(input, moduleKey) {
@@ -2942,6 +2986,8 @@ const source = data.userMention || data.userId || data.username || data.discordI
         if (transferOutput) {
           const leaderSource = moduleKey === 'ban' ? result.output : deduplicateModuleInput(normalizeMissingInputColons(input.value), moduleKey);
           transferOutput.value = buildDepartmentLeadersOutput(leaderSource, moduleKey);
+          const eventWinnersOutput = moduleContent.querySelector('.event-winners-output');
+          if (eventWinnersOutput) eventWinnersOutput.value = buildEventWinnersAnnouncement(leaderSource);
         }
       }
 
@@ -2996,6 +3042,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
     const copyDemoteBtn = moduleContent.querySelector('.action-copy-demote');
     const copyDismissBtn = moduleContent.querySelector('.action-copy-dismiss');
     const copyTransferBtn = moduleContent.querySelector('.action-copy-transfer');
+    const copyEventWinnersBtn = moduleContent.querySelector('.action-copy-event-winners');
 
     processBtn?.addEventListener('click', processCurrentModule);
     copyOutputBtn?.addEventListener('click', () => {
@@ -3030,6 +3077,15 @@ const source = data.userMention || data.userId || data.username || data.discordI
       copyText(transferOutput?.value || '');
       showToast(moduleKey === 'events' ? 'تم نسخ قائمة المتصدرين' : 'تم نسخ نقل الجرد');
     });
+    copyEventWinnersBtn?.addEventListener('click', () => {
+      const eventWinnersOutput = moduleContent.querySelector('.event-winners-output');
+      if (!eventWinnersOutput?.value) {
+        showToast('لا يوجد متصدرون لنسخ الإعلان');
+        return;
+      }
+      copyText(eventWinnersOutput.value);
+      showToast('تم نسخ إعلان الفائزين');
+    });
     clearBtn?.addEventListener('click', () => {
       clearModuleDrafts();
       input.value = '';
@@ -3038,6 +3094,8 @@ const source = data.userMention || data.userId || data.username || data.discordI
       if (finalOutput) finalOutput.value = '';
       report.value = '';
       authorInput.value = '';
+      const eventWinnersOutput = moduleContent.querySelector('.event-winners-output');
+      if (eventWinnersOutput) eventWinnersOutput.value = '';
       totalCount.textContent = 'إجمالي العدد: 0';
       if (banStats) banStats.textContent = 'باند: مؤقت 0 | نهائي 0 | تكتات 0 | فك باند 0';
       if (eventsTotal) eventsTotal.textContent = 'إجمالي عدد الفعاليات: 0';
@@ -3423,6 +3481,14 @@ const source = data.userMention || data.userId || data.username || data.discordI
               <button class="primary action-copy-transfer" type="button">نسخ المتصدرين</button>
             </div>
           </div>
+          ${safeKey === 'events' ? `<div class="mini-form-card event-winners-card">
+            <h3>🥇 إعلان الفائزين بالمراكز الثلاثة</h3>
+            <p class="event-winners-description">يُرتب الأعضاء تلقائيًا حسب عدد الفعاليات، ثم يُجهز إعلان الجوائز للنسخ والنشر.</p>
+            <textarea class="event-winners-output" readonly aria-label="إعلان الفائزين بالمراكز الثلاثة" placeholder="عالج بيانات الإيفنت أولًا لعرض إعلان الفائزين..."></textarea>
+            <div class="mini-form-actions">
+              <button class="primary action-copy-event-winners" type="button">نسخ إعلان الفائزين</button>
+            </div>
+          </div>` : ''}
         </div>
       </div>
     `;
