@@ -2865,6 +2865,10 @@ const source = data.userMention || data.userId || data.username || data.discordI
         return;
       }
       output.value = result.output;
+      moduleContent.querySelectorAll('.discord-chunks').forEach((container) => {
+        container.innerHTML = '';
+        container.classList.remove('discord-chunk-error');
+      });
       if (reasonsOutput) reasonsOutput.value = moduleKey === 'scenario' || moduleKey === 'raqabh' || moduleKey === 'ban' || moduleKey === 'interviews' || moduleKey === 'roles'
         ? (result.reasonsOutput || '')
         : buildDepartmentReasons(result.output, moduleKey);
@@ -2975,6 +2979,14 @@ const source = data.userMention || data.userId || data.username || data.discordI
     memberStatusFields.forEach((field) => field.addEventListener('input', processCurrentModule));
     responsibilitiesField?.addEventListener('input', processCurrentModule);
 
+    moduleContent.querySelectorAll('.discord-split-btn').forEach((button) => {
+      button.addEventListener('click', () => {
+        const source = moduleContent.querySelector(button.dataset.source);
+        const container = button.nextElementSibling;
+        renderDiscordChunks(container, splitForDiscord(source?.value || ''));
+      });
+    });
+
     const processBtn = moduleContent.querySelector('.action-process');
     const copyOutputBtn = moduleContent.querySelector('.action-copy-output');
     const copyFinalBtn = moduleContent.querySelector('.action-copy-final');
@@ -3031,6 +3043,10 @@ const source = data.userMention || data.userId || data.username || data.discordI
       if (eventsTotal) eventsTotal.textContent = 'إجمالي عدد الفعاليات: 0';
       duplicateAlert.style.display = 'none';
       duplicateAlert.textContent = '';
+      moduleContent.querySelectorAll('.discord-chunks').forEach((container) => {
+        container.innerHTML = '';
+        container.classList.remove('discord-chunk-error');
+      });
 
       moduleContent.querySelectorAll(`[data-sync-group="${moduleKey}-shared"]`).forEach((field) => {
         field.value = '';
@@ -3044,6 +3060,87 @@ const source = data.userMention || data.userId || data.username || data.discordI
 
     restoreModuleDrafts();
     processCurrentModule();
+  }
+
+  const DISCORD_MESSAGE_LIMIT = 2000;
+  const EVENT_MEMBER_SEPARATOR = '**==============**';
+  const EVENT_FINAL_SEPARATOR = '`-----------------------------------------------------`';
+
+  function splitForDiscord(text, limit = DISCORD_MESSAGE_LIMIT) {
+    const records = [];
+    let record = '';
+    const lines = String(text || '').match(/[^\n]*(?:\n|$)/g) || [];
+
+    lines.filter(Boolean).forEach((line) => {
+      record += line;
+      const marker = line.replace(/\r?\n$/, '');
+      if (marker === EVENT_MEMBER_SEPARATOR || marker === EVENT_FINAL_SEPARATOR) {
+        records.push(record);
+        record = '';
+      }
+    });
+    if (record) records.push(record);
+
+    const chunks = [];
+    let current = '';
+    for (const memberRecord of records) {
+      if (memberRecord.length > limit) {
+        return {
+          chunks: [],
+          error: 'بيانات عضو واحدة تتجاوز حد ديسكورد، ولا يمكن تقسيمها دون فصل بيانات العضو.'
+        };
+      }
+      if (current && current.length + memberRecord.length > limit) {
+        chunks.push(current);
+        current = '';
+      }
+      current += memberRecord;
+    }
+    if (current) chunks.push(current);
+    return { chunks, error: '' };
+  }
+
+  function renderDiscordChunks(container, result) {
+    if (!container) return;
+    container.innerHTML = '';
+    if (result.error) {
+      container.textContent = result.error;
+      container.classList.add('discord-chunk-error');
+      return;
+    }
+    container.classList.remove('discord-chunk-error');
+    const { chunks } = result;
+    if (!chunks.length) {
+      showToast('لا يوجد نص للتقسيم');
+      return;
+    }
+
+    chunks.forEach((chunk, index) => {
+      const item = document.createElement('div');
+      item.className = 'discord-chunk';
+
+      const head = document.createElement('div');
+      head.className = 'discord-chunk-head';
+      const title = document.createElement('span');
+      title.textContent = `رسالة ${index + 1} من ${chunks.length} (${chunk.length}/${DISCORD_MESSAGE_LIMIT})`;
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'discord-copy-btn';
+      copy.setAttribute('aria-label', `نسخ الرسالة ${index + 1}`);
+      copy.textContent = 'نسخ الرسالة';
+      copy.addEventListener('click', () => {
+        copyText(chunk);
+        showToast(`تم نسخ الرسالة ${index + 1}`);
+      });
+      head.append(title, copy);
+
+      const area = document.createElement('textarea');
+      area.readOnly = true;
+      area.value = chunk;
+      item.append(head, area);
+      container.appendChild(item);
+    });
+    showToast(`تم التقسيم إلى ${chunks.length} رسالة`);
   }
 
   function extractBalanceIdentity(rawLine) {
@@ -3214,6 +3311,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
             <div class="module-card">
               <label>${activeDef.outputLabel}</label>
               <textarea class="module-output" readonly placeholder="ستظهر النتيجة هنا..."></textarea>
+              ${safeKey === 'events' ? '<button class="secondary discord-split-btn" type="button" data-source=".module-output">✂️ تقسيم لرسائل ديسكورد</button><div class="discord-chunks"></div>' : ''}
               <div class="stats-bar">
                 <div class="stats-count">إجمالي العدد: 0</div>
                 ${safeKey === 'ban' ? '<div class="stats-count stats-ban-total">باند: مؤقت 0 | نهائي 0 | تكتات 0 | فك باند 0</div>' : ''}
@@ -3231,6 +3329,7 @@ const source = data.userMention || data.userId || data.username || data.discordI
           <div class="module-card full-width">
             <label>الجرد النهائي</label>
             <textarea class="module-final-output" readonly placeholder="سيظهر الجرد النهائي هنا..."></textarea>
+            ${safeKey === 'events' ? '<button class="secondary discord-split-btn" type="button" data-source=".module-final-output">✂️ تقسيم لرسائل ديسكورد</button><div class="discord-chunks"></div>' : ''}
           </div>
 
           <div class="module-card full-width">

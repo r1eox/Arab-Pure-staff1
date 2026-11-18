@@ -104,6 +104,112 @@ button, input, textarea {
   margin-top: 16px;
 }
 
+.discord-split-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 16px;
+  border: 1px solid color-mix(in srgb, var(--module-accent) 60%, white 40%);
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--module-accent), color-mix(in srgb, var(--module-accent) 72%, #0f172a 28%));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--module-accent) 22%, transparent);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.discord-split-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 9px 20px color-mix(in srgb, var(--module-accent) 32%, transparent);
+  filter: brightness(1.08);
+}
+
+.discord-split-btn:active,
+.discord-copy-btn:active {
+  transform: translateY(0);
+}
+
+.discord-split-btn:focus-visible,
+.discord-copy-btn:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--module-accent) 45%, white 55%);
+  outline-offset: 3px;
+}
+
+.discord-chunks {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.discord-chunk {
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.discord-chunk-error {
+  color: #fca5a5;
+  font-weight: 700;
+}
+
+.discord-chunk textarea {
+  min-height: 140px;
+  margin: 0;
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(2, 6, 23, 0.72);
+  font-size: 0.9rem;
+}
+
+.discord-chunk-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 8px;
+  color: #cbd5e1;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.discord-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  border: 1px solid rgba(125, 211, 252, 0.34);
+  border-radius: 9px;
+  background: rgba(14, 116, 144, 0.16);
+  color: #bae6fd;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.discord-copy-btn:hover {
+  border-color: rgba(125, 211, 252, 0.68);
+  background: rgba(14, 116, 144, 0.3);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 480px) {
+  .discord-split-btn {
+    width: 100%;
+  }
+
+  .discord-chunk-head {
+    align-items: stretch;
+  }
+}
+
 .balance-duplicate-card {
   margin-top: 16px;
   border-color: rgba(248, 113, 113, 0.45);
