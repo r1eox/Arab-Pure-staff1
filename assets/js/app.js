@@ -340,9 +340,9 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function getSectionScore(events, hasResp) {
-    if (events >= 40) return { text: 'ممتاز جدا', points: hasResp ? 6 : 10 };
-    if (events >= 21) return { text: 'ممتاز', points: hasResp ? 4 : 8 };
-    if (events >= 11) return { text: 'جيد جدا', points: hasResp ? 3 : 5 };
+    if (events >= 46) return { text: 'ممتاز جدا', points: hasResp ? 6 : 10 };
+    if (events >= 26) return { text: 'ممتاز', points: hasResp ? 4 : 8 };
+    if (events >= 16) return { text: 'جيد جدا', points: hasResp ? 3 : 5 };
     return { text: 'سيء', points: 0 };
   }
 
